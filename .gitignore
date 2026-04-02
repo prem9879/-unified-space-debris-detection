@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Build and test outputs
+.coverage
+.pytest_cache/
+htmlcov/
+node_modules/
+logs/
+test-results/
+
+# Large generated artifacts and datasets
+artifacts/
+data/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# Local IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

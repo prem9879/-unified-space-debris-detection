@@ -1,0 +1,11 @@
+{
+  "name": "unified-space-debris-detection-ui-tests",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test:ui": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0"
+  }
+}

@@ -1,0 +1,1729 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unified Space Debris Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    (function () {
+      if (window.Chart) return;
+
+      class SimpleChart {
+        constructor(canvas, config) {
+          this.canvas = canvas;
+          this.ctx = canvas.getContext('2d');
+          this.config = config || {};
+          this.render();
+        }
+
+        destroy() {
+          const { canvas, ctx } = this;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        _palette(i) {
+          const colors = ['#38bdf8', '#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#fb7185'];
+          return colors[i % colors.length];
+        }
+
+        _range() {
+          const scales = this.config.options?.scales || {};
+          const y = scales.y || scales.Y || {};
+          return {
+            min: Number.isFinite(y.min) ? y.min : 0,
+            max: Number.isFinite(y.max) ? y.max : 1,
+          };
+        }
+
+        _clear() {
+          const { canvas, ctx } = this;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = 'rgba(9, 17, 31, 0.92)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        _axes(margin) {
+          const { canvas, ctx } = this;
+          ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(margin.left, margin.top);
+          ctx.lineTo(margin.left, canvas.height - margin.bottom);
+          ctx.lineTo(canvas.width - margin.right, canvas.height - margin.bottom);
+          ctx.stroke();
+        }
+
+        renderBar() {
+          const { canvas, ctx } = this;
+          const data = this.config.data || {};
+          const labels = data.labels || [];
+          const datasets = data.datasets || [];
+          const margin = { left: 40, right: 14, top: 14, bottom: 26 };
+          const plotW = canvas.width - margin.left - margin.right;
+          const plotH = canvas.height - margin.top - margin.bottom;
+          const bucketCount = Math.max(1, labels.length);
+          const barGroupWidth = plotW / bucketCount;
+          const barWidth = barGroupWidth / Math.max(1, datasets.length + 0.4);
+          const { min, max } = this._range();
+          const scale = max - min || 1;
+          this._clear();
+          this._axes(margin);
+
+          labels.forEach((label, i) => {
+            const x = margin.left + i * barGroupWidth + barGroupWidth * 0.15;
+            datasets.forEach((dataset, j) => {
+              const value = Number(dataset.data?.[i] ?? 0);
+              const height = ((value - min) / scale) * plotH;
+              ctx.fillStyle = dataset.backgroundColor || this._palette(j);
+              ctx.fillRect(x + j * barWidth, canvas.height - margin.bottom - height, barWidth * 0.86, height);
+            });
+          });
+        }
+
+        renderLine() {
+          const { canvas, ctx } = this;
+          const data = this.config.data || {};
+          const labels = data.labels || [];
+          const datasets = data.datasets || [];
+          const margin = { left: 40, right: 14, top: 14, bottom: 26 };
+          const plotW = canvas.width - margin.left - margin.right;
+          const plotH = canvas.height - margin.top - margin.bottom;
+          const points = Math.max(1, labels.length - 1);
+          const { min, max } = this._range();
+          const scale = max - min || 1;
+          this._clear();
+          this._axes(margin);
+
+          datasets.forEach((dataset, di) => {
+            ctx.strokeStyle = dataset.borderColor || this._palette(di);
+            ctx.fillStyle = dataset.backgroundColor || this._palette(di);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            (dataset.data || []).forEach((raw, i) => {
+              const value = Number(raw || 0);
+              const x = margin.left + (points === 0 ? 0 : (i / points) * plotW);
+              const y = canvas.height - margin.bottom - ((value - min) / scale) * plotH;
+              if (i === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+          });
+        }
+
+        render() {
+          const type = this.config.type || 'line';
+          if (type === 'bar') this.renderBar();
+          else this.renderLine();
+        }
+      }
+
+      window.Chart = SimpleChart;
+    }());
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="workflow-shell">
+    <nav class="workflow-rail" aria-label="Workflow tabs">
+      <button type="button" class="workflow-tab is-active" data-workflow-tab="ingest">
+        <span>01</span>
+        <strong>Ingest</strong>
+        <small>Load NASA data or your own folder</small>
+      </button>
+      <button type="button" class="workflow-tab" data-workflow-tab="infer">
+        <span>02</span>
+        <strong>Infer</strong>
+        <small>Run one image and inspect the result</small>
+      </button>
+      <button type="button" class="workflow-tab" data-workflow-tab="analyze">
+        <span>03</span>
+        <strong>Analyze</strong>
+        <small>Review charts, calibration, and risk</small>
+      </button>
+      <button type="button" class="workflow-tab" data-workflow-tab="export">
+        <span>04</span>
+        <strong>Export</strong>
+        <small>Package evidence and chart outputs</small>
+      </button>
+    </nav>
+
+    <main class="container workflow-root">
+    <section class="hero panel workflow-panel is-active" data-workflow-panel="ingest">
+      <div class="hero-copy">
+        <div class="eyebrow">Unified Multi-Modal Workspace</div>
+        <h1>Space debris detection with visual data loading, preprocessing, and model inspection.</h1>
+        <p>
+          Load NASA public ODPO files, browse your own image datasets, inspect preprocessing, and run inference on
+          single images or whole folders from one workspace.
+        </p>
+        <div class="hero-actions">
+          <button id="heroLoadAllBtn" type="button">Load Everything</button>
+          <button id="heroExplorerBtn" type="button" class="secondary-btn">Open Dataset Explorer</button>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-chip"><span>Model</span><strong>Fusion Net</strong></div>
+        <div class="stat-chip"><span>Data</span><strong>NASA + Local</strong></div>
+        <div class="stat-chip"><span>Views</span><strong>Gallery + Layer</strong></div>
+        <div class="stat-chip"><span>Status</span><strong>{% if checkpoint_exists %}Ready{% else %}Waiting Checkpoint{% endif %}</strong></div>
+        <div class="stat-chip"><span>Security</span><strong id="securityModeChip">Checking...</strong></div>
+        <div class="stat-chip"><span>Access</span><strong id="accessRoleChip">Checking...</strong></div>
+      </div>
+    </section>
+
+    <section class="grid metrics workflow-panel" data-workflow-panel="ingest">
+      <article class="card"><h3>Detection AUC</h3><p>{{ report.get('detection_auc', 'N/A') }}</p></article>
+      <article class="card"><h3>TPR @ 1e-5</h3><p>{{ report.get('detection_tpr_at_1e-5', 'N/A') }}</p></article>
+      <article class="card"><h3>Orbit RMSE</h3><p>{{ report.get('orbit_position_rmse', 'N/A') }}</p></article>
+      <article class="card"><h3>Collision ECE</h3><p>{{ report.get('collision_ece', 'N/A') }}</p></article>
+    </section>
+
+    <section class="grid metrics accuracy-strip workflow-panel" data-workflow-panel="ingest">
+      <article class="card"><h3>Best Model</h3><p id="bestModelValue">Loading...</p></article>
+      <article class="card"><h3>Best Accuracy</h3><p id="bestAccuracyValue">Loading...</p></article>
+      <article class="card"><h3>Best F1</h3><p id="bestF1Value">Loading...</p></article>
+      <article class="card"><h3>Benchmark Samples</h3><p id="sampleCountValue">Loading...</p></article>
+    </section>
+
+    <section class="card form-card workflow-panel" data-workflow-panel="ingest">
+      <h2>AI Pipeline: How All Algorithms Work</h2>
+      <p class="section-note">Use this view to understand the system before you run inference. The advanced controls are intentionally separated from the core flow.</p>
+      <ol id="algoSteps" class="algo-steps"></ol>
+      <div class="pipeline-diagram" aria-label="Pipeline architecture diagram">
+        <div class="pipeline-node input"><strong>Input</strong><span>Optical, radar, physics</span></div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node preprocess"><strong>Preprocess</strong><span>Resize, band select, normalize</span></div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node encoders"><strong>Encoders</strong><span>Radar, temporal optical, physics</span></div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node fusion"><strong>Fusion</strong><span>Attention + modality gating</span></div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node heads"><strong>Heads</strong><span>Detection, class, orbit, collision</span></div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node output"><strong>Output</strong><span>Charts, overlays, calibration</span></div>
+      </div>
+      <div class="table-wrap">
+        <table class="model-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Accuracy</th>
+              <th>F1</th>
+              <th>Precision</th>
+              <th>Recall</th>
+              <th>Loss</th>
+            </tr>
+          </thead>
+          <tbody id="modelTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card form-card workflow-panel" data-workflow-panel="ingest">
+      <h2>Live Inference</h2>
+      <p class="section-note">Core inputs stay visible first. Advanced options are collapsed so first-time users can move straight to a result.</p>
+      {% if not checkpoint_exists %}
+      <p class="warn">Checkpoint missing. Run: python main_train.py</p>
+      {% endif %}
+      <form id="predictForm" enctype="multipart/form-data">
+        <div class="controls-grid">
+          <div>
+            <label>Image Size</label>
+            <select name="image_size" id="imageSize">
+              <option value="64" selected>64</option>
+              <option value="96">96</option>
+              <option value="128">128</option>
+              <option value="160">160</option>
+              <option value="224">224</option>
+            </select>
+          </div>
+          <div>
+            <label>Optical Bands</label>
+            <select name="optical_band" id="opticalBand">
+              <option value="rgb" selected>RGB</option>
+              <option value="r">R</option>
+              <option value="g">G</option>
+              <option value="b">B</option>
+              <option value="rg">RG</option>
+              <option value="rb">RB</option>
+              <option value="gb">GB</option>
+            </select>
+          </div>
+          <div>
+            <label>Normalization</label>
+            <select name="normalize_mode" id="normalizeMode">
+              <option value="unit" selected>Unit [0,1]</option>
+              <option value="zscore">Z-score</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+        </div>
+
+        <details class="advanced-controls">
+          <summary>Advanced inference controls</summary>
+          <div class="controls-grid advanced-controls-grid">
+            <div>
+              <label>Operator Profile</label>
+              <select name="operator_profile" id="operatorProfile">
+                <option value="balanced" selected>Balanced</option>
+                <option value="conservative">Conservative</option>
+                <option value="exploratory">Exploratory</option>
+              </select>
+            </div>
+            <div>
+              <label>Camera Threshold</label>
+              <input type="range" name="camera_threshold" id="cameraThreshold" min="0" max="1" step="0.01" value="0.22" />
+              <small class="helper-text">Suppress low-signal pixels before inference.</small>
+            </div>
+            <div>
+              <label>Inspect Layer</label>
+              <select name="layer_name" id="layerName">
+                <option value="">None</option>
+                {% for layer in layers %}
+                <option value="{{ layer }}">{{ layer }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <label>Optical Image</label>
+        <input type="file" name="optical" accept="image/*" />
+
+        <label>Radar Image</label>
+        <input type="file" name="radar" accept="image/*" />
+
+        <label>Physics Vector (16 comma-separated values)</label>
+        <textarea name="physics">0.12,0.05,0.22,0.08,0.9,1.1,0.7,0.2,0.4,0.6,1.5,1.9,2.1,0.3,0.44,0.77</textarea>
+
+        <button type="submit">Run Prediction</button>
+        <button id="runDemoBtn" type="button" class="secondary-btn">Run Demo Visual Fill</button>
+      </form>
+    </section>
+
+    <section class="card primary-result-card workflow-panel" data-workflow-panel="infer">
+      <div class="section-head">
+        <div>
+          <h2>Primary Result</h2>
+          <p class="section-note">This is the main outcome card. It stays above the analysis charts so the decision is obvious before the deeper plots.</p>
+        </div>
+        <div class="result-badges">
+          <span class="result-badge">Live inference</span>
+          <span class="result-badge muted">Operator ready</span>
+        </div>
+      </div>
+      <div class="result-grid">
+        <div>
+          <h3>Summary</h3>
+          <pre id="summary">Waiting for inference...</pre>
+        </div>
+        <div class="verdict-box primary-verdict-box">
+          <div class="verdict-line"><span>Status</span><strong id="verdictStatus">Waiting for inference</strong></div>
+          <div class="verdict-line"><span>Priority</span><strong id="verdictPriority">-</strong></div>
+          <div class="verdict-line"><span>Recommended Action</span><strong id="verdictAction">-</strong></div>
+          <div class="verdict-line"><span>Quality Score</span><div class="meter compact accent"><span id="verdictMeter"></span></div></div>
+          <p id="verdictSummary" class="verdict-summary">Run inference to see an operator-friendly recommendation.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card form-card workflow-panel" data-workflow-panel="ingest">
+      <h2>NASA ODPO Public Data Loader</h2>
+      <p class="section-note">Ingest public orbital debris sources first so the rest of the workflow has a concrete dataset to inspect.</p>
+      <div class="controls-grid">
+        <button id="loadAllBtn" type="button">Load Everything</button>
+        <button id="loadNasaBtn" type="button">Load NASA Public Data</button>
+        <button id="previewNasaBtn" type="button">Preview Parsed Solar Flux</button>
+      </div>
+      <pre id="nasaSummary">NASA loader not started.</pre>
+    </section>
+
+    <section class="card form-card workflow-panel" data-workflow-panel="ingest">
+      <h2>Batch Dataset Inference</h2>
+      <p class="section-note">Run folder-level inference when you are ready. The default controls keep the primary decision flow simple.</p>
+      <form id="datasetForm">
+        <label>Dataset Folder Path</label>
+        <input type="text" name="dataset_dir" placeholder="C:/datasets/debris" />
+
+        <div class="controls-grid">
+          <div>
+            <label>Modality</label>
+            <select name="modality">
+              <option value="optical" selected>optical</option>
+              <option value="radar">radar</option>
+              <option value="all">all</option>
+            </select>
+          </div>
+          <div>
+            <label>Max Samples</label>
+            <input type="number" name="max_samples" value="12" min="1" max="500" />
+          </div>
+        </div>
+
+        <details class="advanced-controls">
+          <summary>Advanced batch controls</summary>
+          <div class="controls-grid advanced-controls-grid">
+            <div>
+              <label>Operator Profile</label>
+              <select name="operator_profile" id="batchOperatorProfile">
+                <option value="balanced" selected>Balanced</option>
+                <option value="conservative">Conservative</option>
+                <option value="exploratory">Exploratory</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <button type="submit">Run Dataset Batch</button>
+      </form>
+      <pre id="datasetSummary">Waiting for dataset run...</pre>
+    </section>
+
+    <section class="card form-card workflow-panel" data-workflow-panel="ingest">
+      <h2>Dataset Explorer</h2>
+      <p class="section-note">Use the explorer when you want to inspect one file end to end instead of launching a whole batch.</p>
+      <div class="controls-grid">
+        <div>
+          <label>Folder Path</label>
+          <input type="text" id="scanFolder" value="{{ default_dataset_root }}" />
+        </div>
+        <div>
+          <label>Explorer Modality</label>
+          <select id="explorerModality">
+            <option value="optical" selected>optical</option>
+            <option value="radar">radar</option>
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div>
+          <label>Explorer Limit</label>
+          <input type="number" id="explorerLimit" value="100" min="1" max="1000" />
+        </div>
+      </div>
+      <div class="controls-grid">
+        <button id="scanDatasetBtn" type="button">Scan Folder</button>
+        <button id="runSelectedBtn" type="button">Run Selected Image</button>
+      </div>
+      <div class="controls-grid">
+        <div>
+          <label>Image Selection</label>
+          <select id="imageSelect"></select>
+        </div>
+        <div>
+          <label>Selected Image Preview</label>
+          <img id="selectedPreview" class="preview" alt="selected dataset image" />
+        </div>
+      </div>
+      <pre id="explorerSummary">Scan the folder to start exploring images.</pre>
+      <div class="gallery-grid" id="galleryGrid"></div>
+    </section>
+
+    <section class="grid outputs workflow-panel" data-workflow-panel="analyze">
+      <div class="card outputs-intro card-span-2">
+        <h2>Analyze</h2>
+        <p class="section-note">Charts, calibration, and inspection overlays live here. They stay out of the way until you choose this tab.</p>
+      </div>
+      <article class="card">
+        <h3>Class Probabilities</h3>
+        <canvas id="classChart"></canvas>
+      </article>
+      <article class="card">
+        <h3>Preprocessed Optical</h3>
+        <img id="opticalPreview" class="preview" alt="optical preprocessing" />
+      </article>
+      <article class="card">
+        <h3>Preprocessed Radar</h3>
+        <img id="radarPreview" class="preview" alt="radar preprocessing" />
+        <small id="radarHint" class="helper-text">Upload radar image or use radar modality to view true radar preprocessing.</small>
+      </article>
+      <article class="card">
+        <h3>Layer Activation</h3>
+        <img id="activationPreview" class="preview" alt="layer activation" />
+        <small id="activationHint" class="helper-text">Select a layer to visualize activation.</small>
+      </article>
+      <article class="card">
+        <h3>Evidence Heatmap</h3>
+        <img id="heatmapPreview" class="preview" alt="evidence heatmap" />
+      </article>
+      <article class="card">
+        <h3>Bounding-Box Overlay</h3>
+        <img id="bboxPreview" class="preview" alt="bbox overlay" />
+      </article>
+      <article class="card card-span-2">
+        <h3>RGB Channel Analysis</h3>
+        <p class="section-note">Real-time color-space visualization with luminance, channel statistics, and histograms.</p>
+        <div class="controls-grid">
+          <div>
+            <label>RGB Chart View</label>
+            <select id="rgbViewMode">
+              <option value="line" selected>Line</option>
+              <option value="bar">Bar</option>
+            </select>
+          </div>
+          <div>
+            <label>RGB Normalization</label>
+            <select id="rgbNormalizeMode">
+              <option value="peak" selected>Peak (0-1)</option>
+              <option value="sum">Distribution (sum=1)</option>
+            </select>
+          </div>
+          <div>
+            <label>RGB Channel Focus</label>
+            <select id="rgbChannelFocus">
+              <option value="all" selected>All Channels</option>
+              <option value="red">Red Only</option>
+              <option value="green">Green Only</option>
+              <option value="blue">Blue Only</option>
+            </select>
+          </div>
+        </div>
+        <div class="rgb-stats-grid">
+          <div class="rgb-stat r-channel">
+            <div class="stat-value" id="rMeanValue">-</div>
+            <div class="stat-label">Red Mean</div>
+            <div class="stat-detail" id="rStdValue">σ: -</div>
+          </div>
+          <div class="rgb-stat g-channel">
+            <div class="stat-value" id="gMeanValue">-</div>
+            <div class="stat-label">Green Mean</div>
+            <div class="stat-detail" id="gStdValue">σ: -</div>
+          </div>
+          <div class="rgb-stat b-channel">
+            <div class="stat-value" id="bMeanValue">-</div>
+            <div class="stat-label">Blue Mean</div>
+            <div class="stat-detail" id="bStdValue">σ: -</div>
+          </div>
+          <div class="rgb-stat luminance-stat">
+            <div class="stat-value" id="luminanceValue">-</div>
+            <div class="stat-label">Luminance (Y)</div>
+            <div class="stat-detail">CIE 1931</div>
+          </div>
+        </div>
+        <div class="rgb-histograms">
+          <canvas id="redHistogram" width="400" height="120" style="background: rgba(255, 0, 0, 0.08); border-radius: 6px; border: 1px solid rgba(255, 0, 0, 0.3);"></canvas>
+          <small style="color: var(--muted);">Red Channel Histogram</small>
+          <canvas id="greenHistogram" width="400" height="120" style="background: rgba(0, 255, 0, 0.08); border-radius: 6px; border: 1px solid rgba(0, 255, 0, 0.3); margin-top: 12px;"></canvas>
+          <small style="color: var(--muted);">Green Channel Histogram</small>
+          <canvas id="blueHistogram" width="400" height="120" style="background: rgba(0, 0, 255, 0.08); border-radius: 6px; border: 1px solid rgba(0, 0, 255, 0.3); margin-top: 12px;"></canvas>
+          <small style="color: var(--muted);">Blue Channel Histogram</small>
+        </div>
+        <canvas id="rgbCombinedChart" width="400" height="200" style="margin-top: 16px;"></canvas>
+      </article>
+      <article class="card">
+        <h3>Recommended Dataset Sources</h3>
+        <ul id="datasetSources"></ul>
+      </article>
+      <article class="card">
+        <h3>Batch Risk Plot</h3>
+        <canvas id="batchRiskChart"></canvas>
+      </article>
+      <article class="card">
+        <h3>Accuracy Leaderboard</h3>
+        <canvas id="accuracyBarChart"></canvas>
+      </article>
+      <article class="card">
+        <h3>Model Benchmark</h3>
+        <canvas id="benchmarkChart"></canvas>
+        <div id="modelComparisonPanel" class="model-comparison-panel"></div>
+        <pre id="benchmarkSummary">Benchmark not loaded.</pre>
+        <h4 style="margin: 12px 0 8px;">Reliability Diagram</h4>
+        <canvas id="calibrationChart"></canvas>
+        <pre id="calibrationSummary">Calibration report not loaded.</pre>
+      </article>
+      <article class="card card-span-2">
+        <h3>Batch Visual Grid</h3>
+        <div id="batchGrid" class="batch-grid"></div>
+      </article>
+      <article class="card card-span-2">
+        <h3>Research Insight Panel</h3>
+        <div class="insight-grid">
+          <div>
+            <label>Debris Confidence</label>
+            <div class="meter"><span id="debrisMeter"></span></div>
+            <p id="debrisMeterText">0%</p>
+          </div>
+          <div>
+            <label>Collision Risk</label>
+            <div class="meter warning"><span id="collisionMeter"></span></div>
+            <p id="collisionMeterText">0%</p>
+          </div>
+          <div>
+            <label>Prediction Uncertainty</label>
+            <div class="meter neutral"><span id="uncertaintyMeter"></span></div>
+            <p id="uncertaintyText">0%</p>
+          </div>
+          <div>
+            <label>Evidence Intensity</label>
+            <div class="meter accent"><span id="evidenceMeter"></span></div>
+            <p id="evidenceText">0%</p>
+          </div>
+        </div>
+      </article>
+      <article class="card card-span-2">
+        <h3>How to Read This View</h3>
+        <p class="section-note">Use the class chart for the immediate class split, the RGB panel for signal quality, and the benchmark cards when you need model-level evidence.</p>
+      </article>
+    </section>
+
+    <section class="grid workflow-panel export-panel" data-workflow-panel="export">
+      <article class="card card-span-2">
+        <h2>Export</h2>
+        <p class="section-note">Export the evidence bundle once the run is complete. Everything you need for charts, batch records, and benchmark review is grouped here.</p>
+      </article>
+      <article class="card">
+        <h3>Run Artifacts</h3>
+        <div class="export-row">
+          <button id="exportClassPngBtn" type="button" class="secondary-btn">Export Class Plot PNG</button>
+          <button id="exportBatchJsonBtn" type="button" class="secondary-btn">Export Batch JSON</button>
+          <button id="exportBatchCsvBtn" type="button" class="secondary-btn">Export Batch CSV</button>
+          <button id="exportBatchPngBtn" type="button" class="secondary-btn">Export Batch Plot PNG</button>
+          <button id="exportBenchmarkJsonBtn" type="button" class="secondary-btn">Export Benchmark JSON</button>
+          <button id="exportBenchmarkPngBtn" type="button" class="secondary-btn">Export Benchmark PNG</button>
+          <button id="loadCalibrationBtn" type="button" class="secondary-btn">Load Calibration Report</button>
+        </div>
+      </article>
+      <article class="card">
+        <h3>Reference Sources</h3>
+        <p class="section-note">These references are useful when packaging the result for review or when preparing a follow-up dataset pass.</p>
+        <ul id="datasetSources"></ul>
+      </article>
+    </section>
+  </main>
+  </div>
+
+  <script>
+    const form = document.getElementById('predictForm');
+    const datasetForm = document.getElementById('datasetForm');
+    const summary = document.getElementById('summary');
+    const datasetSummary = document.getElementById('datasetSummary');
+    const nasaSummary = document.getElementById('nasaSummary');
+    const explorerSummary = document.getElementById('explorerSummary');
+    const heroLoadAllBtn = document.getElementById('heroLoadAllBtn');
+    const heroExplorerBtn = document.getElementById('heroExplorerBtn');
+    const loadAllBtn = document.getElementById('loadAllBtn');
+    const scanDatasetBtn = document.getElementById('scanDatasetBtn');
+    const runSelectedBtn = document.getElementById('runSelectedBtn');
+    const scanFolder = document.getElementById('scanFolder');
+    const explorerModality = document.getElementById('explorerModality');
+    const explorerLimit = document.getElementById('explorerLimit');
+    const imageSelect = document.getElementById('imageSelect');
+    const selectedPreview = document.getElementById('selectedPreview');
+    const galleryGrid = document.getElementById('galleryGrid');
+    const loadNasaBtn = document.getElementById('loadNasaBtn');
+    const previewNasaBtn = document.getElementById('previewNasaBtn');
+    const runDemoBtn = document.getElementById('runDemoBtn');
+    const ctx = document.getElementById('classChart');
+    const batchRiskCtx = document.getElementById('batchRiskChart');
+    const benchmarkCtx = document.getElementById('benchmarkChart');
+    const calibrationCtx = document.getElementById('calibrationChart');
+    const accuracyBarCtx = document.getElementById('accuracyBarChart');
+    const benchmarkSummary = document.getElementById('benchmarkSummary');
+    const calibrationSummary = document.getElementById('calibrationSummary');
+    const modelComparisonPanel = document.getElementById('modelComparisonPanel');
+    const batchGrid = document.getElementById('batchGrid');
+    const bestModelValue = document.getElementById('bestModelValue');
+    const bestAccuracyValue = document.getElementById('bestAccuracyValue');
+    const bestF1Value = document.getElementById('bestF1Value');
+    const sampleCountValue = document.getElementById('sampleCountValue');
+    const modelTableBody = document.getElementById('modelTableBody');
+    const algoSteps = document.getElementById('algoSteps');
+    const heatmapPreview = document.getElementById('heatmapPreview');
+    const bboxPreview = document.getElementById('bboxPreview');
+    const radarHint = document.getElementById('radarHint');
+    const activationHint = document.getElementById('activationHint');
+    const debrisMeter = document.getElementById('debrisMeter');
+    const collisionMeter = document.getElementById('collisionMeter');
+    const uncertaintyMeter = document.getElementById('uncertaintyMeter');
+    const evidenceMeter = document.getElementById('evidenceMeter');
+    const debrisMeterText = document.getElementById('debrisMeterText');
+    const collisionMeterText = document.getElementById('collisionMeterText');
+    const uncertaintyText = document.getElementById('uncertaintyText');
+    const evidenceText = document.getElementById('evidenceText');
+    const verdictStatus = document.getElementById('verdictStatus');
+    const verdictPriority = document.getElementById('verdictPriority');
+    const verdictAction = document.getElementById('verdictAction');
+    const verdictMeter = document.getElementById('verdictMeter');
+    const verdictSummary = document.getElementById('verdictSummary');
+    const exportClassPngBtn = document.getElementById('exportClassPngBtn');
+    const exportBatchJsonBtn = document.getElementById('exportBatchJsonBtn');
+    const exportBatchCsvBtn = document.getElementById('exportBatchCsvBtn');
+    const exportBatchPngBtn = document.getElementById('exportBatchPngBtn');
+    const exportBenchmarkJsonBtn = document.getElementById('exportBenchmarkJsonBtn');
+    const exportBenchmarkPngBtn = document.getElementById('exportBenchmarkPngBtn');
+    const loadCalibrationBtn = document.getElementById('loadCalibrationBtn');
+    const cameraThreshold = document.getElementById('cameraThreshold');
+    const opticalPreview = document.getElementById('opticalPreview');
+    const radarPreview = document.getElementById('radarPreview');
+    const activationPreview = document.getElementById('activationPreview');
+    const datasetSources = document.getElementById('datasetSources');
+    const rgbViewMode = document.getElementById('rgbViewMode');
+    const rgbNormalizeMode = document.getElementById('rgbNormalizeMode');
+    const rgbChannelFocus = document.getElementById('rgbChannelFocus');
+    const workflowTabs = Array.from(document.querySelectorAll('[data-workflow-tab]'));
+    const workflowPanels = Array.from(document.querySelectorAll('[data-workflow-panel]'));
+    const operatorProfile = document.getElementById('operatorProfile');
+    const batchOperatorProfile = document.getElementById('batchOperatorProfile');
+    const securityModeChip = document.getElementById('securityModeChip');
+    const accessRoleChip = document.getElementById('accessRoleChip');
+    let chart = null;
+    let batchChart = null;
+    let benchmarkChart = null;
+    let accuracyChart = null;
+    let calibrationChart = null;
+    let lastBatchPayload = null;
+    let lastBenchmarkPayload = null;
+    let lastInferencePayload = null;
+    let isRunningSelected = false;
+    let isRunningForm = false;
+    let activeWorkflowPanel = localStorage.getItem('usdd.workflowTab') || 'ingest';
+
+    const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+    const resizeAnalysisCharts = () => {
+      requestAnimationFrame(() => {
+        [chart, batchChart, benchmarkChart, accuracyChart, calibrationChart, redHistChart, greenHistChart, blueHistChart, rgbCombinedChart]
+          .forEach((item) => item?.resize?.());
+      });
+    };
+
+    const syncWorkflowPanels = (panelName) => {
+      const allowedPanels = new Set(['ingest', 'infer', 'analyze', 'export']);
+      activeWorkflowPanel = allowedPanels.has(panelName) ? panelName : 'ingest';
+      localStorage.setItem('usdd.workflowTab', activeWorkflowPanel);
+
+      workflowTabs.forEach((tab) => {
+        tab.classList.toggle('is-active', tab.dataset.workflowTab === activeWorkflowPanel);
+      });
+
+      workflowPanels.forEach((panel) => {
+        const isActive = panel.dataset.workflowPanel === activeWorkflowPanel;
+        panel.classList.toggle('is-active', isActive);
+        panel.toggleAttribute('hidden', !isActive);
+      });
+
+      if (activeWorkflowPanel === 'analyze') {
+        if (lastInferencePayload) {
+          renderRgbAnalysis(lastInferencePayload);
+          renderClassChart(lastInferencePayload);
+        }
+        if (lastBatchPayload) {
+          drawBatchRiskChart(lastBatchPayload.samples || []);
+          drawBatchGrid(lastBatchPayload.samples || []);
+        }
+        resizeAnalysisCharts();
+      }
+    };
+
+    const loadPreferredSettings = () => {
+      const preferredImageSize = localStorage.getItem('usdd.imageSize');
+      const preferredOpticalBand = localStorage.getItem('usdd.opticalBand');
+      const preferredNormalizeMode = localStorage.getItem('usdd.normalizeMode');
+      const preferredOperatorProfile = localStorage.getItem('usdd.operatorProfile');
+
+      if (preferredImageSize) document.getElementById('imageSize').value = preferredImageSize;
+      if (preferredOpticalBand) document.getElementById('opticalBand').value = preferredOpticalBand;
+      if (preferredNormalizeMode) document.getElementById('normalizeMode').value = preferredNormalizeMode;
+      if (preferredOperatorProfile && operatorProfile) operatorProfile.value = preferredOperatorProfile;
+      if (preferredOperatorProfile && batchOperatorProfile) batchOperatorProfile.value = preferredOperatorProfile;
+    };
+
+    const savePreferredSettings = () => {
+      const imageSizeEl = document.getElementById('imageSize');
+      const opticalBandEl = document.getElementById('opticalBand');
+      const normalizeModeEl = document.getElementById('normalizeMode');
+      const selectedOperatorProfile = operatorProfile?.value || batchOperatorProfile?.value || 'balanced';
+
+      if (imageSizeEl) localStorage.setItem('usdd.imageSize', imageSizeEl.value);
+      if (opticalBandEl) localStorage.setItem('usdd.opticalBand', opticalBandEl.value);
+      if (normalizeModeEl) localStorage.setItem('usdd.normalizeMode', normalizeModeEl.value);
+      localStorage.setItem('usdd.operatorProfile', selectedOperatorProfile);
+    };
+
+    loadPreferredSettings();
+    [document.getElementById('imageSize'), document.getElementById('opticalBand'), document.getElementById('normalizeMode'), operatorProfile, batchOperatorProfile].forEach((el) => {
+      if (!el) return;
+      el.addEventListener('change', () => {
+        if (el === operatorProfile && batchOperatorProfile) batchOperatorProfile.value = operatorProfile.value;
+        if (el === batchOperatorProfile && operatorProfile) operatorProfile.value = batchOperatorProfile.value;
+        savePreferredSettings();
+      });
+    });
+
+    const refreshPlatformStatus = async () => {
+      if (!securityModeChip || !accessRoleChip) return;
+      securityModeChip.textContent = 'Checking...';
+      accessRoleChip.textContent = 'Checking...';
+
+      try {
+        const hRes = await fetch('/healthz');
+        const hPayload = await hRes.json();
+        const authRequired = !!hPayload.auth_required;
+        const rate = Number(hPayload.rate_limit_per_min || 0);
+        securityModeChip.textContent = authRequired ? `Auth + RL(${rate}/min)` : `Open + RL(${rate}/min)`;
+      } catch (error) {
+        securityModeChip.textContent = 'Unavailable';
+      }
+
+      try {
+        const whoRes = await fetch('/whoami');
+        if (!whoRes.ok) {
+          accessRoleChip.textContent = 'Anonymous';
+          return;
+        }
+        const who = await whoRes.json();
+        accessRoleChip.textContent = (who.role || 'anonymous').toUpperCase();
+      } catch (error) {
+        accessRoleChip.textContent = 'Anonymous';
+      }
+    };
+
+    const ensureLayerSelection = () => {
+      const sel = document.getElementById('layerName');
+      if (sel.value) return sel.value;
+      const fallback = Array.from(sel.options).find((o) => o.value);
+      return fallback ? fallback.value : '';
+    };
+
+    const setInsight = (payload) => {
+      const debris = clamp01(payload.detect_probability);
+      const collision = clamp01(payload.collision_probability);
+      const classProbs = payload.class_probabilities || [];
+      const topProb = classProbs.length ? Math.max(...classProbs) : debris;
+      const uncertainty = 1 - clamp01(topProb);
+      const evidence = clamp01(payload.evidence_visuals?.hot_pixel_ratio);
+
+      debrisMeter.style.width = `${(debris * 100).toFixed(1)}%`;
+      collisionMeter.style.width = `${(collision * 100).toFixed(1)}%`;
+      uncertaintyMeter.style.width = `${(uncertainty * 100).toFixed(1)}%`;
+      evidenceMeter.style.width = `${(evidence * 100).toFixed(1)}%`;
+
+      debrisMeterText.textContent = `${(debris * 100).toFixed(1)}%`;
+      collisionMeterText.textContent = `${(collision * 100).toFixed(1)}%`;
+      uncertaintyText.textContent = `${(uncertainty * 100).toFixed(1)}%`;
+      evidenceText.textContent = `${(evidence * 100).toFixed(1)}%`;
+    };
+
+    const renderOperationalVerdict = (payload) => {
+      const verdict = payload.operational_summary || {};
+      verdictStatus.textContent = verdict.summary || 'Waiting for inference';
+      verdictPriority.textContent = verdict.priority || '-';
+      verdictAction.textContent = verdict.action || '-';
+      verdictSummary.textContent = verdict.operator_tone
+        ? `${verdict.operator_tone} mode. ${verdict.summary || 'Run inference to see an operator-friendly recommendation.'}`
+        : (verdict.summary || 'Run inference to see an operator-friendly recommendation.');
+      const score = Math.max(0, Math.min(1, Number(verdict.quality_score) || 0));
+      verdictMeter.style.width = `${(score * 100).toFixed(1)}%`;
+    };
+
+    const applyVisuals = (payload) => {
+      opticalPreview.src = payload.preprocessed_visuals?.optical_preprocessed || '';
+      const radarSource = payload.preprocessed_visuals?.radar_preprocessed || payload.preprocessed_visuals?.optical_preprocessed || '';
+      radarPreview.src = radarSource;
+      activationPreview.src = payload.activation_visual || '';
+      heatmapPreview.src = payload.evidence_visuals?.heatmap_visual || '';
+      bboxPreview.src = payload.evidence_visuals?.bbox_overlay_visual || '';
+
+      opticalPreview.style.display = payload.preprocessed_visuals?.optical_preprocessed ? 'block' : 'none';
+      radarPreview.style.display = radarSource ? 'block' : 'none';
+      activationPreview.style.display = payload.activation_visual ? 'block' : 'none';
+      heatmapPreview.style.display = payload.evidence_visuals?.heatmap_visual ? 'block' : 'none';
+      bboxPreview.style.display = payload.evidence_visuals?.bbox_overlay_visual ? 'block' : 'none';
+
+      radarHint.textContent = payload.preprocessed_visuals?.radar_preprocessed
+        ? 'True radar preprocessing shown.'
+        : 'Radar input missing: showing optical-derived fallback view.';
+      activationHint.textContent = payload.activation_visual
+        ? 'Activation computed for selected layer.'
+        : 'Activation unavailable. Layer was not selected or did not produce map output.';
+
+      setInsight(payload);
+      renderOperationalVerdict(payload);
+    };
+
+    const buildCompactInferenceSummary = (payload) => {
+      const basis = payload.decision_basis || {};
+      const verdict = payload.operational_summary || {};
+      return {
+        file_path: payload.file_path || null,
+        modality: payload.modality || null,
+        operator_profile: payload.operator_profile || basis.operator_profile || verdict.operator_profile || 'balanced',
+        detect_probability: payload.detect_probability,
+        collision_probability: payload.collision_probability,
+        predicted_class: payload.predicted_class,
+        class_probabilities: payload.class_probabilities,
+        decision_basis: {
+          predicted_label: basis.predicted_label,
+          threshold: basis.threshold,
+          margin_from_threshold: basis.margin_from_threshold,
+          confidence_band: basis.confidence_band,
+          operator_profile: basis.operator_profile,
+          top_class_probability: basis.top_class_probability,
+          hot_pixel_ratio: basis.hot_pixel_ratio,
+          bbox_area_ratio: basis.bbox_area_ratio,
+          reason: basis.reason,
+        },
+        operational_summary: {
+          operator_profile: verdict.operator_profile,
+          operator_tone: verdict.operator_tone,
+          priority: verdict.priority,
+          action: verdict.action,
+          quality_score: verdict.quality_score,
+          summary: verdict.summary,
+        },
+        bbox: payload.evidence_visuals?.bbox || null,
+      };
+    };
+
+    const buildCompactBatchSummary = (payload) => {
+      const compactSamples = (payload.samples || []).map((s) => ({
+        file_name: s.file_name,
+        detect_probability: s.detect_probability,
+        collision_probability: s.collision_probability,
+        detect_label: s.detect_label,
+        predicted_class: s.predicted_class,
+        bbox: s.bbox,
+        decision_basis: {
+          margin_from_threshold: s.decision_basis?.margin_from_threshold,
+          confidence_band: s.decision_basis?.confidence_band,
+          hot_pixel_ratio: s.decision_basis?.hot_pixel_ratio,
+          bbox_area_ratio: s.decision_basis?.bbox_area_ratio,
+        },
+      }));
+
+      return {
+        dataset_dir: payload.dataset_dir,
+        modality: payload.modality,
+        operator_profile: payload.operator_profile || 'balanced',
+        num_images: payload.num_images,
+        processed: payload.processed,
+        avg_detect_probability: payload.avg_detect_probability,
+        avg_collision_probability: payload.avg_collision_probability,
+        max_detect_probability: payload.max_detect_probability,
+        min_detect_probability: payload.min_detect_probability,
+        samples: compactSamples,
+      };
+    };
+
+    const renderClassChart = (payload) => {
+      if (!payload?.class_probabilities?.length) return;
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: payload.class_probabilities.map((_, i) => `Class ${i}`),
+          datasets: [{
+            label: 'Probability',
+            data: payload.class_probabilities,
+            backgroundColor: '#0f766e'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true, max: 1 } }
+        }
+      });
+    };
+
+    const triggerDownload = (filename, blob) => {
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    const downloadText = (filename, text, mime) => {
+      triggerDownload(filename, new Blob([text], { type: mime }));
+    };
+
+    const chartToPng = (canvas, filename) => {
+      if (!canvas) return;
+      if (!canvas.width || !canvas.height) {
+        alert('Chart is not ready yet. Run inference first.');
+        return;
+      }
+      canvas.toBlob((blob) => {
+        if (blob) {
+          triggerDownload(filename, blob);
+          return;
+        }
+        alert('Could not export chart PNG. Please run inference once and retry.');
+      }, 'image/png');
+    };
+
+    const appendSources = async () => {
+      const res = await fetch('/options');
+      const payload = await res.json();
+      if (!payload.dataset_sources) return;
+      datasetSources.innerHTML = payload.dataset_sources
+        .map((d) => `<li><a href="${d.url}" target="_blank" rel="noreferrer">${d.name}</a></li>`)
+        .join('');
+    };
+
+    const drawBatchRiskChart = (samples) => {
+      if (!samples || !samples.length) {
+        if (batchChart) {
+          batchChart.destroy();
+          batchChart = null;
+        }
+        return;
+      }
+
+      const labels = samples.map((s, i) => `${i + 1}`);
+      const detect = samples.map((s) => s.detect_probability);
+      const collision = samples.map((s) => s.collision_probability);
+
+      if (batchChart) batchChart.destroy();
+      batchChart = new Chart(batchRiskCtx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Detect Prob',
+              data: detect,
+              borderColor: '#22d3ee',
+              backgroundColor: 'rgba(34,211,238,0.2)',
+              tension: 0.3,
+            },
+            {
+              label: 'Collision Prob',
+              data: collision,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245,158,11,0.2)',
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 0, max: 1 } },
+        },
+      });
+    };
+
+    const drawBatchGrid = (samples) => {
+      if (!samples || !samples.length) {
+        batchGrid.innerHTML = '<div class="gallery-empty">No batch sample visuals yet. Run Batch Dataset Inference.</div>';
+        return;
+      }
+
+      batchGrid.innerHTML = samples.map((s) => `
+        <article class="batch-card ${s.detect_probability >= 0.5 ? 'hit' : 'low'}">
+          <img src="${s.thumb}" alt="${s.file_name}" />
+          <img class="evidence-thumb" src="${s.bbox_overlay_thumb || s.thumb}" alt="${s.file_name} bbox overlay" />
+          <div class="batch-meta">
+            <strong>${s.file_name}</strong>
+            <span>Detect: ${(s.detect_probability * 100).toFixed(1)}%</span>
+            <span>Collision: ${(s.collision_probability * 100).toFixed(1)}%</span>
+            <span>Label: ${s.detect_label}</span>
+            <span>Confidence: ${s.decision_basis?.confidence_band || 'n/a'}</span>
+            <span>Margin: ${Number(s.decision_basis?.margin_from_threshold || 0).toFixed(4)}</span>
+          </div>
+        </article>
+      `).join('');
+    };
+
+    const loadBenchmark = async () => {
+      const res = await fetch('/model_benchmark');
+      const payload = await res.json();
+      if (!res.ok) {
+        benchmarkSummary.textContent = payload.error || 'Benchmark unavailable';
+        renderModelComparisonPanel([]);
+        bestModelValue.textContent = 'Unavailable';
+        bestAccuracyValue.textContent = 'Unavailable';
+        bestF1Value.textContent = 'Unavailable';
+        sampleCountValue.textContent = 'Unavailable';
+        return;
+      }
+
+      lastBenchmarkPayload = payload;
+      benchmarkSummary.textContent = JSON.stringify(payload, null, 2);
+      const labels = payload.models.map((m) => m.model);
+      const f1 = payload.models.map((m) => m.f1);
+      const acc = payload.models.map((m) => m.accuracy);
+      renderModelComparisonPanel(payload.models);
+
+      if (benchmarkChart) benchmarkChart.destroy();
+      benchmarkChart = new Chart(benchmarkCtx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'F1', data: f1, backgroundColor: '#38bdf8' },
+            { label: 'Accuracy', data: acc, backgroundColor: '#f59e0b' },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 0, max: 1 } },
+        },
+      });
+
+      if (accuracyChart) accuracyChart.destroy();
+      accuracyChart = new Chart(accuracyBarCtx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Accuracy',
+            data: acc,
+            backgroundColor: '#22d3ee',
+          }],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 0, max: 1 } },
+        },
+      });
+
+      const ranked = [...payload.models].sort((a, b) => {
+        const scoreA = (a.accuracy || 0) + (a.f1 || 0);
+        const scoreB = (b.accuracy || 0) + (b.f1 || 0);
+        return scoreB - scoreA;
+      });
+      const best = ranked[0] || null;
+
+      bestModelValue.textContent = best ? best.model : 'N/A';
+      bestAccuracyValue.textContent = best ? `${(best.accuracy * 100).toFixed(2)}%` : 'N/A';
+      bestF1Value.textContent = best ? `${best.f1.toFixed(4)}` : 'N/A';
+      sampleCountValue.textContent = String(payload.num_samples || 0);
+
+      modelTableBody.innerHTML = payload.models.map((m) => `
+        <tr>
+          <td>${m.model}</td>
+          <td>${(m.accuracy * 100).toFixed(2)}%</td>
+          <td>${m.f1.toFixed(4)}</td>
+          <td>${m.precision.toFixed(4)}</td>
+          <td>${m.recall.toFixed(4)}</td>
+          <td>${m.test_loss.toFixed(4)}</td>
+        </tr>
+      `).join('');
+
+      const modelNames = payload.models.map((m) => m.model).join(', ');
+      const steps = [
+        '1) Data ingestion: local optical/radar images plus NASA ODPO public files are indexed and previewed.',
+        '2) Preprocessing: resizing, band selection, normalization, and camera-threshold suppression reduce noise.',
+        '3) Feature extraction: deep backbones learn debris morphology and texture signatures from images.',
+        '4) Multi-task prediction: the model outputs debris detect probability, class probabilities, collision risk, and orbit vector.',
+        '5) Visual evidence: layer activation maps, pseudo-heatmaps, and bounding-box overlays expose model attention areas.',
+        `6) Benchmarking: ${modelNames} are compared on accuracy, precision, recall, F1, and test loss to select the best scientific model.`,
+      ];
+      algoSteps.innerHTML = steps.map((s) => `<li>${s}</li>`).join('');
+    };
+
+    const loadCalibrationReport = async () => {
+      const datasetInput = datasetForm.querySelector('input[name="dataset_dir"]');
+      const maxSamplesInput = datasetForm.querySelector('input[name="max_samples"]');
+      const datasetDir = (datasetInput?.value || '').trim() || (scanFolder?.value || '').trim();
+      if (!datasetDir) {
+        calibrationSummary.textContent = 'Set Dataset Folder Path first (Batch Dataset Inference section).';
+        return;
+      }
+
+      calibrationSummary.textContent = 'Computing calibration report...';
+      const data = new FormData();
+      data.set('dataset_dir', datasetDir);
+      data.set('modality', datasetForm.querySelector('select[name="modality"]')?.value || 'optical');
+      data.set('max_samples', maxSamplesInput?.value || '200');
+      data.set('bins', '10');
+      data.set('image_size', document.getElementById('imageSize').value);
+      data.set('optical_band', document.getElementById('opticalBand').value);
+      data.set('normalize_mode', document.getElementById('normalizeMode').value);
+      data.set('camera_threshold', cameraThreshold.value);
+
+      const res = await fetch('/calibration_report', { method: 'POST', body: data });
+      const payload = await res.json();
+      if (!res.ok) {
+        calibrationSummary.textContent = payload.error || 'Calibration report failed';
+        return;
+      }
+
+      const m = payload.metrics || {};
+      calibrationSummary.textContent = JSON.stringify({
+        dataset_dir: payload.dataset_dir,
+        modality: payload.modality,
+        total_discovered: payload.total_discovered,
+        evaluated: payload.evaluated,
+        skipped_unlabeled: payload.skipped_unlabeled,
+        ece: m.ece,
+        mce: m.mce,
+        brier_score: m.brier_score,
+        nll: m.nll,
+        accuracy: m.accuracy,
+        balanced_accuracy: m.balanced_accuracy,
+        precision: m.precision,
+        recall: m.recall,
+        f1: m.f1,
+        confusion_matrix: m.confusion_matrix,
+      }, null, 2);
+
+      const bins = (m.bins || []).filter((b) => (b.count || 0) > 0);
+      const labels = bins.map((b) => `${(b.range?.[0] ?? 0).toFixed(1)}-${(b.range?.[1] ?? 0).toFixed(1)}`);
+      const conf = bins.map((b) => b.avg_confidence || 0);
+      const acc = bins.map((b) => b.empirical_accuracy || 0);
+
+      if (calibrationChart) calibrationChart.destroy();
+      calibrationChart = new Chart(calibrationCtx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Empirical Accuracy',
+              data: acc,
+              borderColor: '#22d3ee',
+              backgroundColor: 'rgba(34,211,238,0.12)',
+              tension: 0.25,
+            },
+            {
+              label: 'Avg Confidence',
+              data: conf,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245,158,11,0.12)',
+              tension: 0.25,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 0, max: 1 } },
+        },
+      });
+    };
+
+    let redHistChart = null, greenHistChart = null, blueHistChart = null, rgbCombinedChart = null;
+
+    const sharedChartDefaults = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#dbeafe' },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true }, grid: { color: 'rgba(148,163,184,0.08)' } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+      },
+    };
+
+    const renderSharedChart = (canvasId, chartRef, config) => {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return chartRef;
+
+      const stabilizeCanvasSize = () => {
+        const parentWidth = canvas.parentElement?.clientWidth || 740;
+        const cssWidth = Math.max(320, Math.min(1400, Math.floor(parentWidth)));
+        const cssHeight = canvasId === 'rgbCombinedChart' ? 200 : 84;
+        const dpr = Math.max(1, Math.min(2, Number(window.devicePixelRatio) || 1));
+
+        // Force sane CSS + backing-store sizes to avoid intrinsic-ratio explosions.
+        canvas.style.width = '100%';
+        canvas.style.height = `${cssHeight}px`;
+        canvas.style.maxHeight = `${cssHeight}px`;
+        canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+        canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
+      };
+
+      stabilizeCanvasSize();
+      if (chartRef) chartRef.destroy();
+      return new Chart(canvas, {
+        type: config.type,
+        data: config.data,
+        options: {
+          ...sharedChartDefaults,
+          ...config.options,
+        },
+      });
+    };
+
+    const renderModelComparisonPanel = (models) => {
+      if (!modelComparisonPanel) return;
+      if (!models || !models.length) {
+        modelComparisonPanel.innerHTML = '<div class="gallery-empty">Model comparison will appear after benchmark data is loaded.</div>';
+        return;
+      }
+
+      const ranked = [...models].sort((a, b) => ((b.accuracy || 0) + (b.f1 || 0)) - ((a.accuracy || 0) + (a.f1 || 0)));
+      const best = ranked[0];
+      const topThree = ranked.slice(0, 3);
+
+      modelComparisonPanel.innerHTML = `
+        <div class="model-winner">
+          <span class="model-badge">Best overall</span>
+          <strong>${best.model}</strong>
+          <div class="model-score-grid">
+            <span>Accuracy ${(best.accuracy * 100).toFixed(2)}%</span>
+            <span>F1 ${best.f1.toFixed(4)}</span>
+            <span>Precision ${best.precision.toFixed(4)}</span>
+          </div>
+        </div>
+        <div class="model-rank-list">
+          ${topThree.map((model, index) => `
+            <article class="model-rank-card">
+              <div class="model-rank-head">
+                <span>#${index + 1}</span>
+                <strong>${model.model}</strong>
+              </div>
+              <div class="model-rank-bars">
+                <div><label>Accuracy</label><div class="meter compact"><span style="width:${(model.accuracy * 100).toFixed(1)}%"></span></div></div>
+                <div><label>F1</label><div class="meter compact accent"><span style="width:${(model.f1 * 100).toFixed(1)}%"></span></div></div>
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      `;
+    };
+
+    const normalizeHistogram = (data, mode) => {
+      if (!Array.isArray(data) || !data.length) return [];
+      if (mode === 'sum') {
+        const sum = data.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
+        return data.map((v) => (Number(v) || 0) / sum);
+      }
+      const maxVal = Math.max(...data.map((v) => Number(v) || 0), 1e-6);
+      return data.map((v) => (Number(v) || 0) / maxVal);
+    };
+
+    const renderRgbAnalysis = (payload) => {
+      if (!payload.rgb_analysis) {
+        document.getElementById('rMeanValue').textContent = '-';
+        document.getElementById('gMeanValue').textContent = '-';
+        document.getElementById('bMeanValue').textContent = '-';
+        document.getElementById('luminanceValue').textContent = '-';
+        return;
+      }
+
+      const rgb = payload.rgb_analysis;
+      const stats = rgb.stats || {};
+      const normMode = rgbNormalizeMode?.value || 'peak';
+      const focus = rgbChannelFocus?.value || 'all';
+      const viewMode = rgbViewMode?.value || 'line';
+      const rHist = normalizeHistogram(rgb.r_histogram || [], normMode);
+      const gHist = normalizeHistogram(rgb.g_histogram || [], normMode);
+      const bHist = normalizeHistogram(rgb.b_histogram || [], normMode);
+      
+      // Format and display statistics
+      document.getElementById('rMeanValue').textContent = (stats.r_mean || 0).toFixed(0);
+      document.getElementById('rStdValue').textContent = `σ: ${(stats.r_std || 0).toFixed(1)}`;
+      document.getElementById('gMeanValue').textContent = (stats.g_mean || 0).toFixed(0);
+      document.getElementById('gStdValue').textContent = `σ: ${(stats.g_std || 0).toFixed(1)}`;
+      document.getElementById('bMeanValue').textContent = (stats.b_mean || 0).toFixed(0);
+      document.getElementById('bStdValue').textContent = `σ: ${(stats.b_std || 0).toFixed(1)}`;
+      document.getElementById('luminanceValue').textContent = (stats.luminance || 0).toFixed(0);
+      
+      const toHistogramData = (hist, label, color) => ({
+        labels: Array.from({ length: hist.length }, (_, i) => `${i}`),
+        datasets: [{
+          label,
+          data: hist,
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 1,
+          barPercentage: 1,
+          categoryPercentage: 1,
+        }],
+      });
+
+      redHistChart = renderSharedChart('redHistogram', redHistChart, {
+        type: 'bar',
+        data: toHistogramData(rHist, 'Red histogram', 'rgba(255, 68, 68, 0.65)'),
+        options: { plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { beginAtZero: true, max: 1 } } },
+      });
+      greenHistChart = renderSharedChart('greenHistogram', greenHistChart, {
+        type: 'bar',
+        data: toHistogramData(gHist, 'Green histogram', 'rgba(68, 255, 68, 0.65)'),
+        options: { plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { beginAtZero: true, max: 1 } } },
+      });
+      blueHistChart = renderSharedChart('blueHistogram', blueHistChart, {
+        type: 'bar',
+        data: toHistogramData(bHist, 'Blue histogram', 'rgba(68, 68, 255, 0.65)'),
+        options: { plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { beginAtZero: true, max: 1 } } },
+      });
+
+      const labels = Array.from({length: 16}, (_, i) => `${(i*16)}-${(i+1)*16}`);
+      const binSize = Math.max(1, Math.floor(rHist.length / 16));
+      const rData = [], gData = [], bData = [];
+
+      for (let i = 0; i < 16; i++) {
+        const start = i * binSize;
+        const end = (i+1) * binSize;
+        rData.push(Math.max(...(rHist.slice(start, end) || [0])));
+        gData.push(Math.max(...(gHist.slice(start, end) || [0])));
+        bData.push(Math.max(...(bHist.slice(start, end) || [0])));
+      }
+
+      const datasets = [];
+      if (focus === 'all' || focus === 'red') {
+        datasets.push({ label: 'Red Channel', data: rData, borderColor: '#ff4444', backgroundColor: 'rgba(255, 68, 68, 0.10)', tension: 0.3, fill: false });
+      }
+      if (focus === 'all' || focus === 'green') {
+        datasets.push({ label: 'Green Channel', data: gData, borderColor: '#44ff44', backgroundColor: 'rgba(68, 255, 68, 0.10)', tension: 0.3, fill: false });
+      }
+      if (focus === 'all' || focus === 'blue') {
+        datasets.push({ label: 'Blue Channel', data: bData, borderColor: '#4444ff', backgroundColor: 'rgba(68, 68, 255, 0.10)', tension: 0.3, fill: false });
+      }
+
+      rgbCombinedChart = renderSharedChart('rgbCombinedChart', rgbCombinedChart, {
+        type: viewMode,
+        data: { labels, datasets },
+        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1 } } },
+      });
+    };
+
+    const setBusy = (btn, busyText, isBusy) => {
+      if (!btn) return;
+      if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent;
+      btn.disabled = !!isBusy;
+      btn.textContent = isBusy ? busyText : btn.dataset.originalText;
+    };
+
+    const safeJson = async (res) => {
+      try {
+        return await res.json();
+      } catch (_) {
+        return { error: `Request failed with status ${res.status}` };
+      }
+    };
+
+    workflowTabs.forEach((tab) => {
+      tab.addEventListener('click', () => syncWorkflowPanels(tab.dataset.workflowTab));
+    });
+
+    syncWorkflowPanels(activeWorkflowPanel);
+    appendSources();
+    loadBenchmark();
+    refreshPlatformStatus();
+
+    if (heroLoadAllBtn && loadAllBtn) {
+      heroLoadAllBtn.addEventListener('click', () => {
+        const nasaCard = loadAllBtn.closest('.card');
+        if (nasaCard) {
+          nasaCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        loadAllBtn.click();
+      });
+    }
+
+    if (heroExplorerBtn && scanDatasetBtn) {
+      heroExplorerBtn.addEventListener('click', () => {
+        const explorerCard = scanDatasetBtn.closest('.card');
+        if (explorerCard) {
+          explorerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        scanDatasetBtn.click();
+      });
+    }
+
+    loadNasaBtn.addEventListener('click', async () => {
+      nasaSummary.textContent = 'Loading NASA public ODPO data...';
+      setBusy(loadNasaBtn, 'Loading NASA data...', true);
+      try {
+        const res = await fetch('/load_nasa_public_data', { method: 'POST' });
+        const payload = await res.json();
+        nasaSummary.textContent = JSON.stringify(payload, null, 2);
+      } catch (error) {
+        nasaSummary.textContent = `NASA load failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        setBusy(loadNasaBtn, '', false);
+      }
+    });
+
+    loadAllBtn.addEventListener('click', async () => {
+      nasaSummary.textContent = 'Loading everything available...';
+      setBusy(loadAllBtn, 'Loading all data...', true);
+      setBusy(heroLoadAllBtn, 'Loading all data...', true);
+      try {
+        const res = await fetch('/load_all_public_data', { method: 'POST' });
+        const payload = await res.json();
+        if (!res.ok) {
+          nasaSummary.textContent = payload.error || 'Load-all request failed';
+          return;
+        }
+        nasaSummary.textContent = JSON.stringify(payload, null, 2);
+        await refreshGallery(scanFolder.value.trim() || 'data');
+      } catch (error) {
+        nasaSummary.textContent = `Load-all failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        setBusy(loadAllBtn, '', false);
+        setBusy(heroLoadAllBtn, '', false);
+      }
+    });
+
+    previewNasaBtn.addEventListener('click', async () => {
+      nasaSummary.textContent = 'Loading parsed solar flux preview...';
+      setBusy(previewNasaBtn, 'Loading preview...', true);
+      try {
+        const res = await fetch('/preview_nasa_solarflux');
+        const payload = await res.json();
+        nasaSummary.textContent = JSON.stringify(payload, null, 2);
+      } catch (error) {
+        nasaSummary.textContent = `Preview failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        setBusy(previewNasaBtn, '', false);
+      }
+    });
+
+    const fillSelect = (items) => {
+      imageSelect.innerHTML = items.map((item) => `<option value="${item.path}">${item.relative_path} [${item.modality}]</option>`).join('');
+      if (items.length > 0) {
+        imageSelect.value = items[0].path;
+      }
+    };
+
+    const renderGallery = (items) => {
+      if (!items.length) {
+        galleryGrid.innerHTML = '<div class="gallery-empty">No images found in this folder yet. Add optical or radar images and scan again.</div>';
+        return;
+      }
+
+      galleryGrid.innerHTML = items.map((item) => `
+        <button type="button" class="gallery-card" data-path="${item.path}">
+          <img src="${item.thumb}" alt="${item.name}" />
+          <div class="gallery-meta">
+            <strong>${item.name}</strong>
+            <span>${item.modality}</span>
+          </div>
+        </button>
+      `).join('');
+
+      galleryGrid.querySelectorAll('.gallery-card').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          imageSelect.value = btn.dataset.path;
+          await loadPreviewForSelected();
+        });
+      });
+    };
+
+    const refreshGallery = async (folder) => {
+      const res = await fetch(`/gallery_inventory?folder=${encodeURIComponent(folder)}&limit=120`);
+      const payload = await res.json();
+      if (!res.ok) {
+        explorerSummary.textContent = payload.error || 'Gallery refresh failed';
+        return;
+      }
+      renderGallery(payload.items || []);
+    };
+
+    const loadPreviewForSelected = async () => {
+      const path = imageSelect.value;
+      if (!path) return;
+      const res = await fetch(`/preview_image?path=${encodeURIComponent(path)}`);
+      const payload = await res.json();
+      if (res.ok) {
+        selectedPreview.src = payload.image;
+        selectedPreview.style.display = 'block';
+      }
+    };
+
+    scanDatasetBtn.addEventListener('click', async () => {
+      const folder = scanFolder.value.trim();
+      if (!folder) {
+        explorerSummary.textContent = 'Enter a dataset folder path first.';
+        return;
+      }
+
+      explorerSummary.textContent = 'Scanning folder...';
+      setBusy(scanDatasetBtn, 'Scanning...', true);
+      setBusy(heroExplorerBtn, 'Scanning...', true);
+      try {
+        const url = `/dataset_inventory?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(explorerLimit.value || '100')}`;
+        const res = await fetch(url);
+        const payload = await res.json();
+
+        if (!res.ok) {
+          explorerSummary.textContent = payload.error || 'Scan failed';
+          return;
+        }
+
+        fillSelect(payload.items || []);
+        explorerSummary.textContent = JSON.stringify({ folder: payload.folder, count: payload.count, sample: payload.items?.slice(0, 5) }, null, 2);
+        await refreshGallery(folder);
+        if (payload.count > 0) {
+          await loadPreviewForSelected();
+        } else {
+          selectedPreview.removeAttribute('src');
+          selectedPreview.style.display = 'none';
+        }
+      } catch (error) {
+        explorerSummary.textContent = `Scan failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        setBusy(scanDatasetBtn, '', false);
+        setBusy(heroExplorerBtn, '', false);
+      }
+    });
+
+    imageSelect.addEventListener('change', loadPreviewForSelected);
+
+    const runSelectedInference = async () => {
+      if (isRunningSelected) return;
+      const path = imageSelect.value;
+      if (!path) {
+        explorerSummary.textContent = 'Scan a folder and select an image first.';
+        return;
+      }
+
+      isRunningSelected = true;
+      setBusy(runSelectedBtn, 'Running...', true);
+      setBusy(runDemoBtn, 'Running...', true);
+      explorerSummary.textContent = 'Running inference on selected image...';
+
+      try {
+        const data = new FormData();
+        data.set('file_path', path);
+        data.set('modality', explorerModality.value);
+        data.set('image_size', document.getElementById('imageSize').value);
+        data.set('optical_band', document.getElementById('opticalBand').value);
+        data.set('normalize_mode', document.getElementById('normalizeMode').value);
+        data.set('camera_threshold', cameraThreshold.value);
+        data.set('layer_name', ensureLayerSelection());
+
+        const res = await fetch('/predict_file', { method: 'POST', body: data });
+        const payload = await safeJson(res);
+
+        if (!res.ok) {
+          explorerSummary.textContent = payload.error || 'Inference failed';
+          return;
+        }
+
+        explorerSummary.textContent = JSON.stringify(buildCompactInferenceSummary(payload), null, 2);
+        lastInferencePayload = payload;
+        applyVisuals(payload);
+        renderRgbAnalysis(payload);
+        renderClassChart(payload);
+        summary.textContent = JSON.stringify(buildCompactInferenceSummary(payload), null, 2);
+      } catch (error) {
+        explorerSummary.textContent = `Inference failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        isRunningSelected = false;
+        setBusy(runSelectedBtn, '', false);
+        setBusy(runDemoBtn, '', false);
+      }
+    };
+
+    runSelectedBtn.addEventListener('click', runSelectedInference);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isRunningForm) return;
+      isRunningForm = true;
+      const data = new FormData(form);
+      data.set('layer_name', ensureLayerSelection());
+
+      summary.textContent = 'Running inference...';
+      try {
+        const res = await fetch('/predict', { method: 'POST', body: data });
+        const payload = await safeJson(res);
+
+        if (!res.ok) {
+          summary.textContent = payload.error || 'Inference failed';
+          return;
+        }
+
+        summary.textContent = JSON.stringify(buildCompactInferenceSummary(payload), null, 2);
+        lastInferencePayload = payload;
+        applyVisuals(payload);
+        renderRgbAnalysis(payload);
+        renderClassChart(payload);
+      } catch (error) {
+        summary.textContent = `Inference failed: ${error?.message || 'Unknown error'}`;
+      } finally {
+        isRunningForm = false;
+      }
+    });
+
+    refreshGallery(scanFolder.value.trim() || 'data');
+
+    runDemoBtn.addEventListener('click', async () => {
+      if (!imageSelect.value && scanFolder.value.trim()) {
+        const url = `/dataset_inventory?folder=${encodeURIComponent(scanFolder.value.trim())}&limit=${encodeURIComponent(explorerLimit.value || '100')}`;
+        const res = await fetch(url);
+        const payload = await res.json();
+        if (res.ok) {
+          fillSelect(payload.items || []);
+          if ((payload.items || []).length) {
+            await loadPreviewForSelected();
+          }
+        }
+      }
+      if (!imageSelect.value) return;
+      await runSelectedInference();
+    });
+
+    datasetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(datasetForm);
+      data.set('image_size', document.getElementById('imageSize').value);
+      data.set('optical_band', document.getElementById('opticalBand').value);
+      data.set('normalize_mode', document.getElementById('normalizeMode').value);
+      data.set('camera_threshold', cameraThreshold.value);
+
+      datasetSummary.textContent = 'Running dataset batch inference...';
+      const res = await fetch('/predict_dataset', { method: 'POST', body: data });
+      const payload = await res.json();
+
+      if (!res.ok) {
+        datasetSummary.textContent = payload.error || 'Dataset batch inference failed';
+        return;
+      }
+      lastBatchPayload = payload;
+      datasetSummary.textContent = JSON.stringify(buildCompactBatchSummary(payload), null, 2);
+      drawBatchRiskChart(payload.samples || []);
+      drawBatchGrid(payload.samples || []);
+    });
+
+    exportClassPngBtn.addEventListener('click', () => {
+      if (!chart) {
+        alert('Class probability chart is not created yet. Run inference first.');
+        return;
+      }
+      chartToPng(ctx, 'class_probabilities.png');
+    });
+
+    exportBatchJsonBtn.addEventListener('click', () => {
+      if (!lastBatchPayload) return;
+      downloadText('batch_inference.json', JSON.stringify(lastBatchPayload, null, 2), 'application/json');
+    });
+
+    exportBatchCsvBtn.addEventListener('click', () => {
+      if (!lastBatchPayload?.samples?.length) return;
+      const headers = ['file_name', 'detect_probability', 'collision_probability', 'predicted_class', 'detect_label'];
+      const rows = lastBatchPayload.samples.map((s) => [
+        s.file_name,
+        s.detect_probability,
+        s.collision_probability,
+        s.predicted_class,
+        s.detect_label,
+      ]);
+      const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      downloadText('batch_inference.csv', csv, 'text/csv');
+    });
+
+    exportBatchPngBtn.addEventListener('click', () => chartToPng(batchRiskCtx, 'batch_risk_plot.png'));
+
+    exportBenchmarkJsonBtn.addEventListener('click', () => {
+      if (!lastBenchmarkPayload) return;
+      downloadText('model_benchmark.json', JSON.stringify(lastBenchmarkPayload, null, 2), 'application/json');
+    });
+
+    exportBenchmarkPngBtn.addEventListener('click', () => chartToPng(benchmarkCtx, 'model_benchmark.png'));
+    loadCalibrationBtn.addEventListener('click', loadCalibrationReport);
+
+    [rgbViewMode, rgbNormalizeMode, rgbChannelFocus].forEach((el) => {
+      if (!el) return;
+      el.addEventListener('change', () => {
+        if (lastInferencePayload) renderRgbAnalysis(lastInferencePayload);
+      });
+    });
+  </script>
+</body>
+</html>
