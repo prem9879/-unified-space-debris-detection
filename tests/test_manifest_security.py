@@ -18,7 +18,9 @@ def test_create_manifest_with_locked_splits(tmp_path) -> None:
 
     for i in range(3):
         Image.new("RGB", (48, 48), (230, 230, 230)).save(root / "debris" / f"d_{i}.png")
-        Image.new("RGB", (48, 48), (40, 40, 40)).save(root / "non_debris" / f"n_{i}.png")
+        Image.new("RGB", (48, 48), (40, 40, 40)).save(
+            root / "non_debris" / f"n_{i}.png"
+        )
 
     manifest_path = tmp_path / "manifest_v1.json"
     payload = create_dataset_manifest(
@@ -89,7 +91,13 @@ def test_calibration_acceptance_gates_present(tmp_path) -> None:
     client = app.test_client()
     res = client.post(
         "/calibration_report",
-        data={"dataset_dir": str(tmp_path), "modality": "optical", "max_samples": "4", "bins": "10", "operating_point": "0.5"},
+        data={
+            "dataset_dir": str(tmp_path),
+            "modality": "optical",
+            "max_samples": "4",
+            "bins": "10",
+            "operating_point": "0.5",
+        },
     )
     assert res.status_code == 200
     payload = res.get_json()

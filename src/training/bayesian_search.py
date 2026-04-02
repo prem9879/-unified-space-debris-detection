@@ -1,7 +1,7 @@
 """
 Bayesian Hyperparameter Optimization with Optuna
 """
-import optuna
+
 
 def objective(trial):
     """
@@ -9,6 +9,7 @@ def objective(trial):
     """
     # TODO: Sample hyperparameters, train model, return metric
     pass
+
 
 def run_search():
     """

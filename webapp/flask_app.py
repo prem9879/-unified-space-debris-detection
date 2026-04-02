@@ -412,6 +412,7 @@ def _build_decision_basis(
     collision_probability: float,
     class_probabilities: list[float] | None,
     evidence: dict[str, object] | None,
+    inference_source: str | None = None,
 ) -> dict[str, object]:
     threshold = 0.5
     low_cutoff = 0.45
@@ -437,13 +438,24 @@ def _build_decision_basis(
     hot_pixel_ratio = float((evidence or {}).get("hot_pixel_ratio", 0.0))
     bbox_area_ratio = float((evidence or {}).get("bbox_area_ratio", 0.0))
     probs = class_probabilities or []
-    top_class_probability = float(max(probs)) if probs else float(detect_probability)
+    ranked = sorted((float(probability), index) for index, probability in enumerate(probs))
+    top_class_probability = float(ranked[-1][0]) if ranked else float(detect_probability)
+    second_class_probability = float(ranked[-2][0]) if len(ranked) > 1 else 0.0
+    top_class_index = int(ranked[-1][1]) if ranked else -1
+    class_gap = float(top_class_probability - second_class_probability)
+    entropy = 0.0
+    if probs:
+        probabilities = np.asarray(probs, dtype=np.float64)
+        probabilities = np.clip(probabilities, 1e-12, 1.0)
+        entropy = float(-np.sum(probabilities * np.log(probabilities)))
 
+    source = inference_source or "trained model"
     reason = (
-        f"Label '{label}' is assigned because detect_probability={detect_probability:.4f} "
-        f"with decision band [{low_cutoff:.2f}, {high_cutoff:.2f}] around threshold={threshold:.2f}. "
+        f"{source} predicts {label.replace('_', ' ')} because detect_probability={detect_probability:.4f} "
+        f"around threshold={threshold:.2f} (band [{low_cutoff:.2f}, {high_cutoff:.2f}]). "
         f"Margin={margin:+.4f}, confidence_band={confidence_band}, "
-        f"top_class_probability={top_class_probability:.4f}, collision_probability={collision_probability:.4f}, "
+        f"top_class_index={top_class_index}, top_class_probability={top_class_probability:.4f}, "
+        f"class_gap={class_gap:.4f}, entropy={entropy:.4f}, collision_probability={collision_probability:.4f}, "
         f"hot_pixel_ratio={hot_pixel_ratio:.4f}, bbox_area_ratio={bbox_area_ratio:.4f}."
     )
 
@@ -455,9 +467,13 @@ def _build_decision_basis(
         "margin_from_threshold": margin,
         "confidence_band": confidence_band,
         "top_class_probability": top_class_probability,
+        "top_class_index": top_class_index,
+        "class_gap": class_gap,
+        "entropy": entropy,
         "collision_probability": float(collision_probability),
         "hot_pixel_ratio": hot_pixel_ratio,
         "bbox_area_ratio": bbox_area_ratio,
+        "inference_source": source,
         "reason": reason,
     }
 
@@ -466,10 +482,13 @@ def _build_operational_summary(decision_basis: dict[str, object]) -> dict[str, o
     profile = str(decision_basis.get("operator_profile", "balanced"))
     label = str(decision_basis.get("predicted_label", "uncertain"))
     confidence_band = str(decision_basis.get("confidence_band", "low"))
+    inference_source = str(decision_basis.get("inference_source", "trained model"))
     collision_probability = float(decision_basis.get("collision_probability", 0.0))
     margin = abs(float(decision_basis.get("margin_from_threshold", 0.0)))
     bbox_area_ratio = float(decision_basis.get("bbox_area_ratio", 0.0))
     hot_pixel_ratio = float(decision_basis.get("hot_pixel_ratio", 0.0))
+    class_gap = float(decision_basis.get("class_gap", 0.0))
+    entropy = float(decision_basis.get("entropy", 0.0))
 
     profile_settings = {
         "conservative": {
@@ -520,7 +539,17 @@ def _build_operational_summary(decision_basis: dict[str, object]) -> dict[str, o
             priority = "low"
             action = "Treat as non-debris and archive for reference."
 
-    quality_score = max(0.0, min(1.0, (1.0 - margin) * 0.45 + (1.0 - min(1.0, hot_pixel_ratio + bbox_area_ratio)) * 0.25 + (1.0 - min(1.0, adjusted_collision)) * 0.3))
+    quality_score = max(
+        0.0,
+        min(
+            1.0,
+            (1.0 - margin) * 0.35
+            + (1.0 - min(1.0, hot_pixel_ratio + bbox_area_ratio)) * 0.2
+            + (1.0 - min(1.0, adjusted_collision)) * 0.25
+            + min(1.0, class_gap) * 0.1
+            + max(0.0, 1.5 - entropy) * 0.1,
+        ),
+    )
 
     return {
         "operator_profile": profile,
@@ -530,12 +559,18 @@ def _build_operational_summary(decision_basis: dict[str, object]) -> dict[str, o
         "quality_score": float(quality_score),
         "confidence_band": confidence_band,
         "summary": f"{profile_settings['tone']} mode: {label.replace('_', ' ').title()} with {confidence_band} confidence. {action}",
+        "evidence_note": (
+            f"Inference source: {inference_source}. Class gap={class_gap:.4f}, entropy={entropy:.4f}, "
+            f"hot pixels={hot_pixel_ratio:.4f}, bbox area={bbox_area_ratio:.4f}."
+        ),
         "signals": {
             "collision_probability": collision_probability,
             "adjusted_collision_probability": adjusted_collision,
             "margin_from_threshold": margin,
             "bbox_area_ratio": bbox_area_ratio,
             "hot_pixel_ratio": hot_pixel_ratio,
+            "class_gap": class_gap,
+            "entropy": entropy,
         },
     }
 
@@ -857,8 +892,10 @@ def predict():
         collision_probability=result.collision_probability,
         class_probabilities=result.class_probabilities,
         evidence=evidence,
+        inference_source=result.inference_source,
     )
     decision_basis["operator_profile"] = operator_profile
+    decision_basis["inference_source"] = result.inference_source
     operational_summary = _build_operational_summary(decision_basis)
 
     return jsonify(
@@ -870,6 +907,7 @@ def predict():
             "class_probabilities": result.class_probabilities,
             "orbit_vector": result.orbit_vector,
             "snr_prediction": result.snr_prediction,
+            "inference_source": result.inference_source,
             "preprocessed_visuals": visuals,
             "activation_visual": activation_visual,
             "evidence_visuals": evidence,
@@ -931,8 +969,10 @@ def predict_dataset():
             collision_probability=result.collision_probability,
             class_probabilities=result.class_probabilities,
             evidence=evidence,
+            inference_source=result.inference_source,
         )
         decision_basis["operator_profile"] = operator_profile
+        decision_basis["inference_source"] = result.inference_source
         operational_summary = _build_operational_summary(decision_basis)
 
         rows.append(
@@ -948,6 +988,7 @@ def predict_dataset():
                 "bbox_overlay_thumb": evidence["bbox_overlay_visual"],
                 "heatmap_thumb": evidence["heatmap_visual"],
                 "bbox": evidence["bbox"],
+                "inference_source": result.inference_source,
                 "decision_basis": decision_basis,
                 "operational_summary": operational_summary,
             }
@@ -1113,8 +1154,10 @@ def predict_file():
         collision_probability=result.collision_probability,
         class_probabilities=result.class_probabilities,
         evidence=evidence,
+        inference_source=result.inference_source,
     )
     decision_basis["operator_profile"] = operator_profile
+    decision_basis["inference_source"] = result.inference_source
     operational_summary = _build_operational_summary(decision_basis)
 
     return jsonify(
@@ -1128,6 +1171,7 @@ def predict_file():
             "class_probabilities": result.class_probabilities,
             "orbit_vector": result.orbit_vector,
             "snr_prediction": result.snr_prediction,
+            "inference_source": result.inference_source,
             "preprocessed_visuals": visuals,
             "activation_visual": activation_visual,
             "evidence_visuals": evidence,

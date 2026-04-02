@@ -211,4 +211,4 @@ Set `USDD_SECURITY_PROFILE=production` to disable legacy static key fallback and
 
 ## License
 
-Add your project license here if you want to publish the repository publicly.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

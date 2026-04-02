@@ -2,13 +2,16 @@
 SGP4 Propagator Residual Loss
 Implements L_orbit as described in the system equations.
 """
+
 import torch
 import torch.nn as nn
+
 
 class SGP4ResidualLoss(nn.Module):
     """
     Penalizes orbit predictions that violate SGP4 propagation.
     """
+
     def __init__(self):
         super().__init__()
         # TODO: Integrate with sgp4 package for differentiable propagation

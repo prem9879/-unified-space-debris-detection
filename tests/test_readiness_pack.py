@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from scripts.generate_readiness_pack import build_pack
 
@@ -27,13 +26,21 @@ def test_build_readiness_pack(tmp_path) -> None:
         ),
         encoding="utf-8",
     )
-    benchmark.write_text(json.dumps({"results": {"resnet18": {"f1": 0.9}}}), encoding="utf-8")
-    calibration.write_text(json.dumps({"acceptance_gates": {"passed": True}}), encoding="utf-8")
+    benchmark.write_text(
+        json.dumps({"results": {"resnet18": {"f1": 0.9}}}), encoding="utf-8"
+    )
+    calibration.write_text(
+        json.dumps({"acceptance_gates": {"passed": True}}), encoding="utf-8"
+    )
     slo.write_text(json.dumps({"latency_ms": {"p50": 10, "p95": 20}}), encoding="utf-8")
     security.write_text(json.dumps({"auth_required": True}), encoding="utf-8")
-    hard_negative.write_text(json.dumps({"summary": {"total_files": 12}}), encoding="utf-8")
+    hard_negative.write_text(
+        json.dumps({"summary": {"total_files": 12}}), encoding="utf-8"
+    )
 
-    pack = build_pack(manifest, benchmark, calibration, slo, security, hard_negative, output)
+    pack = build_pack(
+        manifest, benchmark, calibration, slo, security, hard_negative, output
+    )
 
     assert output.exists()
     assert pack["status"] == "release_ready"

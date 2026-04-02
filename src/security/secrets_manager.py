@@ -74,7 +74,11 @@ def _parse_key_ring_payload(raw_payload: str, source: str) -> KeyRing:
     if not entries:
         raise ValueError("No valid keys found in key ring payload")
 
-    rotation = payload.get("rotation", {}) if isinstance(payload.get("rotation", {}), dict) else {}
+    rotation = (
+        payload.get("rotation", {})
+        if isinstance(payload.get("rotation", {}), dict)
+        else {}
+    )
     interval_days = int(rotation.get("interval_days", 30))
     overlap_days = int(rotation.get("overlap_days", 7))
 
@@ -143,7 +147,11 @@ def _load_legacy_env_mapping() -> KeyRing | None:
     one_key = os.getenv("USDD_API_KEY", "").strip()
     if one_key:
         return KeyRing(
-            entries=[KeyEntry(key=one_key, role="admin", kid="legacy-single", status="active")],
+            entries=[
+                KeyEntry(
+                    key=one_key, role="admin", kid="legacy-single", status="active"
+                )
+            ],
             policy=KeyPolicy(
                 rotation_interval_days=30,
                 overlap_days=7,
@@ -161,7 +169,11 @@ def get_api_key_ring(force_refresh: bool = False) -> KeyRing:
     if _CACHE.get("env_sig") != env_sig:
         force_refresh = True
 
-    if not force_refresh and _CACHE["key_ring"] is not None and now < float(_CACHE["expires_at"]):
+    if (
+        not force_refresh
+        and _CACHE["key_ring"] is not None
+        and now < float(_CACHE["expires_at"])
+    ):
         return _CACHE["key_ring"]
 
     profile = _security_profile()
@@ -196,7 +208,11 @@ def get_api_key_ring(force_refresh: bool = False) -> KeyRing:
 
 
 def as_role_map(key_ring: KeyRing) -> dict[str, str]:
-    return {entry.key: entry.role for entry in key_ring.entries if entry.status in {"active", "grace"}}
+    return {
+        entry.key: entry.role
+        for entry in key_ring.entries
+        if entry.status in {"active", "grace"}
+    }
 
 
 def as_rotation_info(key_ring: KeyRing) -> dict[str, Any]:
@@ -205,6 +221,10 @@ def as_rotation_info(key_ring: KeyRing) -> dict[str, Any]:
         "fetched_at_epoch": key_ring.policy.fetched_at_epoch,
         "rotation_interval_days": key_ring.policy.rotation_interval_days,
         "overlap_days": key_ring.policy.overlap_days,
-        "active_key_ids": [entry.kid for entry in key_ring.entries if entry.status == "active"],
-        "grace_key_ids": [entry.kid for entry in key_ring.entries if entry.status == "grace"],
+        "active_key_ids": [
+            entry.kid for entry in key_ring.entries if entry.status == "active"
+        ],
+        "grace_key_ids": [
+            entry.kid for entry in key_ring.entries if entry.status == "grace"
+        ],
     }

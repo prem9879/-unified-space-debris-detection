@@ -12,7 +12,6 @@ from PIL import Image
 import torch
 import torch.nn.functional as F
 
-from src.data.synthetic_dataset import make_demo_sample
 from src.models.unified_debris_net import UnifiedDebrisNet
 
 
@@ -24,6 +23,7 @@ class InferenceResult:
     predicted_class: int
     orbit_vector: list[float]
     snr_prediction: float
+    inference_source: str
 
 
 @dataclass
@@ -37,9 +37,16 @@ class PreprocessOptions:
 class UnifiedInferenceService:
     """High-level API for loading checkpoints and running robust inference."""
 
-    def __init__(self, checkpoint_path: str | Path | None, device: str | None = None, allow_demo_mode: bool = True) -> None:
+    def __init__(
+        self,
+        checkpoint_path: str | Path | None,
+        device: str | None = None,
+        allow_demo_mode: bool = True,
+    ) -> None:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.checkpoint_path = Path(checkpoint_path) if checkpoint_path is not None else None
+        self.checkpoint_path = (
+            Path(checkpoint_path) if checkpoint_path is not None else None
+        )
         self.allow_demo_mode = allow_demo_mode
         self.demo_mode = False
 
@@ -53,7 +60,9 @@ class UnifiedInferenceService:
 
         self.checkpoint = checkpoint
         classes = checkpoint.get("classes") if checkpoint else None
-        self.num_classes = int(checkpoint.get("num_classes", len(classes) if classes else 4))
+        self.num_classes = int(
+            checkpoint.get("num_classes", len(classes) if classes else 4)
+        )
         self.model = UnifiedDebrisNet(num_classes=self.num_classes).to(self.device)
         if checkpoint:
             state_dict = self._extract_state_dict(checkpoint)
@@ -68,7 +77,7 @@ class UnifiedInferenceService:
                 cleaned = {}
                 for name, value in state_dict.items():
                     if name.startswith("module."):
-                        cleaned[name[len("module."):]] = value
+                        cleaned[name[len("module.") :]] = value
                     else:
                         cleaned[name] = value
                 return cleaned
@@ -79,7 +88,15 @@ class UnifiedInferenceService:
         for name, module in self.model.named_modules():
             if not name:
                 continue
-            if isinstance(module, (torch.nn.Conv2d, torch.nn.Linear, torch.nn.LSTM, torch.nn.MultiheadAttention)):
+            if isinstance(
+                module,
+                (
+                    torch.nn.Conv2d,
+                    torch.nn.Linear,
+                    torch.nn.LSTM,
+                    torch.nn.MultiheadAttention,
+                ),
+            ):
                 layers.append(name)
         return layers
 
@@ -128,6 +145,20 @@ class UnifiedInferenceService:
         return f"data:image/png;base64,{encoded}"
 
     @staticmethod
+    def _sigmoid(x: float) -> float:
+        return float(1.0 / (1.0 + np.exp(-x)))
+
+    def _empty_sample(self, image_size: int) -> dict[str, torch.Tensor]:
+        radar = torch.zeros(
+            (1, 1, image_size, image_size), dtype=torch.float32, device=self.device
+        )
+        optical = torch.zeros(
+            (1, 4, 3, image_size, image_size), dtype=torch.float32, device=self.device
+        )
+        physics = torch.zeros((1, 16), dtype=torch.float32, device=self.device)
+        return {"radar": radar, "optical": optical, "physics": physics}
+
+    @staticmethod
     def _image_to_tensor(
         image: Image.Image,
         channels: int = 3,
@@ -155,7 +186,7 @@ class UnifiedInferenceService:
         options: PreprocessOptions | None = None,
     ) -> dict[str, torch.Tensor]:
         options = options or PreprocessOptions()
-        sample = make_demo_sample(device=self.device)
+        sample = self._empty_sample(options.image_size)
 
         if optical_image is not None:
             frame, _ = self._image_to_tensor(
@@ -201,7 +232,7 @@ class UnifiedInferenceService:
         options = options or PreprocessOptions()
         visuals: dict[str, str] = {}
 
-        sample = make_demo_sample(device=self.device)
+        sample = self._empty_sample(options.image_size)
 
         if optical_image is not None:
             frame, arr = self._image_to_tensor(
@@ -240,7 +271,67 @@ class UnifiedInferenceService:
 
         return sample, visuals
 
-    def predict_with_layer(self, inputs: dict[str, torch.Tensor], layer_name: str | None = None) -> tuple[InferenceResult, str | None]:
+    def _predict_demo(self, inputs: dict[str, torch.Tensor]) -> InferenceResult:
+        # Deterministic fallback when no trained checkpoint is available.
+        # This avoids random outputs and keeps scoring tied to real input signal.
+        radar = inputs["radar"]
+        optical = inputs["optical"]
+        physics = inputs["physics"]
+
+        optical_mean = float(optical.mean().item())
+        optical_std = float(optical.std().item())
+        radar_mean = float(radar.mean().item())
+        radar_peak = float(radar.max().item())
+        physics_energy = float(torch.norm(physics, p=2).item() / 4.0)
+
+        detect_raw = (
+            2.4 * optical_mean
+            + 1.8 * optical_std
+            + 2.0 * radar_peak
+            + 0.8 * radar_mean
+            + 0.6 * physics_energy
+            - 1.6
+        )
+        detect_probability = self._sigmoid(detect_raw)
+
+        collision_raw = (
+            1.3 * detect_probability + 0.8 * radar_peak + 0.3 * physics_energy - 1.0
+        )
+        collision_probability = self._sigmoid(collision_raw)
+
+        c0 = max(0.0, 1.0 - detect_probability)
+        c1 = max(
+            0.0,
+            detect_probability * (1.0 - collision_probability) * (0.55 + optical_std),
+        )
+        c2 = max(0.0, detect_probability * collision_probability * (0.45 + radar_peak))
+        c3 = max(
+            0.0, detect_probability * collision_probability * (0.35 + physics_energy)
+        )
+        raw = np.array([c0, c1, c2, c3], dtype=np.float32)
+        total = float(raw.sum())
+        if total <= 1e-8:
+            class_probs = [1.0, 0.0, 0.0, 0.0]
+        else:
+            class_probs = (raw / total).tolist()
+
+        predicted_class = int(np.argmax(class_probs))
+        orbit = physics[0, :3].detach().cpu().numpy().astype(np.float32).tolist()
+        snr_prediction = float(max(0.0, radar_peak * 20.0 + radar_mean * 10.0))
+
+        return InferenceResult(
+            detect_probability=float(detect_probability),
+            collision_probability=float(collision_probability),
+            class_probabilities=[float(v) for v in class_probs],
+            predicted_class=predicted_class,
+            orbit_vector=[float(v) for v in orbit],
+            snr_prediction=snr_prediction,
+            inference_source="heuristic_fallback",
+        )
+
+    def predict_with_layer(
+        self, inputs: dict[str, torch.Tensor], layer_name: str | None = None
+    ) -> tuple[InferenceResult, str | None]:
         activation_b64: str | None = None
         hook = None
         captured: dict[str, torch.Tensor] = {}
@@ -249,6 +340,7 @@ class UnifiedInferenceService:
             named = dict(self.model.named_modules())
             module = named.get(layer_name)
             if module is not None:
+
                 def _hook(_module, _inp, out):
                     if isinstance(out, tuple):
                         out = out[0]
@@ -294,6 +386,9 @@ class UnifiedInferenceService:
         return result, activation_b64
 
     def predict(self, inputs: dict[str, torch.Tensor]) -> InferenceResult:
+        if self.demo_mode:
+            return self._predict_demo(inputs)
+
         with torch.no_grad():
             out = self.model(inputs["radar"], inputs["optical"], inputs["physics"])
 
@@ -311,4 +406,5 @@ class UnifiedInferenceService:
             predicted_class=predicted_class,
             orbit_vector=[float(v) for v in orbit],
             snr_prediction=float(snr_pred),
+            inference_source="trained_checkpoint",
         )

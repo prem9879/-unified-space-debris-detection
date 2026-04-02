@@ -2,14 +2,25 @@
 Main Training Loop for UnifiedDebrisNet
 Handles mixed precision, GradNorm, logging, and checkpointing.
 """
+
 import torch
 from src.models.unified_debris_net import UnifiedDebrisNet
+
 
 class Trainer:
     """
     Training loop for UnifiedDebrisNet with multi-task loss and logging.
     """
-    def __init__(self, model: UnifiedDebrisNet, dataloaders: dict, optimizer, loss_fn, aux_losses: dict | None = None, device: str = 'cuda'):
+
+    def __init__(
+        self,
+        model: UnifiedDebrisNet,
+        dataloaders: dict,
+        optimizer,
+        loss_fn,
+        aux_losses: dict | None = None,
+        device: str = "cuda",
+    ):
         self.model = model.to(device)
         self.dataloaders = dataloaders
         self.optimizer = optimizer
@@ -21,7 +32,9 @@ class Trainer:
         self.mse = torch.nn.MSELoss()
 
     def _move_batch(self, batch: dict) -> dict:
-        return {k: v.to(self.device) if torch.is_tensor(v) else v for k, v in batch.items()}
+        return {
+            k: v.to(self.device) if torch.is_tensor(v) else v for k, v in batch.items()
+        }
 
     def _compute_loss(self, outputs: dict, batch: dict) -> torch.Tensor:
         l_detect = self.bce(outputs["detect_logits"], batch["detect"])
@@ -36,7 +49,9 @@ class Trainer:
                 outputs["snr_pred"], batch["sigma_rcs"], batch["range"]
             )
         if "sgp4" in self.aux_losses:
-            total = total + 0.1 * self.aux_losses["sgp4"](outputs["orbit_pred"], batch["orbit_sgp4"])
+            total = total + 0.1 * self.aux_losses["sgp4"](
+                outputs["orbit_pred"], batch["orbit_sgp4"]
+            )
         if "ece" in self.aux_losses:
             probs = torch.sigmoid(outputs["collision_logits"])
             total = total + 0.1 * self.aux_losses["ece"](probs, batch["collision"])
@@ -77,5 +92,7 @@ class Trainer:
             val_loss = self.validate()
             history["train_loss"].append(train_loss)
             history["val_loss"].append(val_loss)
-            print(f"Epoch {epoch + 1}/{epochs} - train_loss: {train_loss:.4f} - val_loss: {val_loss:.4f}")
+            print(
+                f"Epoch {epoch + 1}/{epochs} - train_loss: {train_loss:.4f} - val_loss: {val_loss:.4f}"
+            )
         return history

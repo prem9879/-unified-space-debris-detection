@@ -2,13 +2,16 @@
 Calibration Loss for Collision Probability (ECE)
 Implements Expected Calibration Error minimization.
 """
+
 import torch
 import torch.nn as nn
+
 
 class ECELoss(nn.Module):
     """
     Computes Expected Calibration Error (ECE) for probabilistic outputs.
     """
+
     def __init__(self, n_bins: int = 15):
         super().__init__()
         self.n_bins = n_bins

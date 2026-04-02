@@ -13,6 +13,7 @@ env/
 
 # Build and test outputs
 .coverage
+coverage.xml
 .pytest_cache/
 htmlcov/
 node_modules/

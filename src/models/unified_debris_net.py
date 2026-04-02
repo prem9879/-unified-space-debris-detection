@@ -1,7 +1,7 @@
 """
 UnifiedDebrisNet: Main model class combining all modules.
 """
-import torch
+
 import torch.nn as nn
 from .radar_encoder import RadarEncoder
 from .optical_encoder import TemporalOpticalEncoder
@@ -9,10 +9,12 @@ from .physics_encoder import PhysicsEncoder
 from .fusion import CrossModalAttentionFusion
 from .multitask_heads import MultiTaskHead
 
+
 class UnifiedDebrisNet(nn.Module):
     """
     Unified multi-modal debris detection and characterization model.
     """
+
     def __init__(self, num_classes: int = 4):
         super().__init__()
         self.radar_encoder = RadarEncoder()

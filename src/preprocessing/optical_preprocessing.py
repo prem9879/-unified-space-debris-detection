@@ -1,7 +1,9 @@
 """
 Optical Preprocessing: Background subtraction, streak extraction
 """
+
 import numpy as np
+
 
 def background_subtraction(frames: np.ndarray) -> np.ndarray:
     """
@@ -9,6 +11,7 @@ def background_subtraction(frames: np.ndarray) -> np.ndarray:
     """
     # TODO: Implement background subtraction
     pass
+
 
 def streak_extraction(frame: np.ndarray) -> np.ndarray:
     """

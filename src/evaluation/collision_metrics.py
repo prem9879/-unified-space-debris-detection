@@ -1,8 +1,10 @@
 """
 Collision Risk Metrics: ECE, Brier, reliability diagram, AUC-ROC
 """
+
 from sklearn.metrics import brier_score_loss, roc_auc_score
 import numpy as np
+
 
 def compute_ece(y_true, y_prob, n_bins=15):
     y_true = np.asarray(y_true, dtype=np.float32)
@@ -23,8 +25,10 @@ def compute_ece(y_true, y_prob, n_bins=15):
         ece += weight * abs(acc - conf)
     return float(ece)
 
+
 def compute_brier(y_true, y_prob):
     return brier_score_loss(y_true, y_prob)
+
 
 def compute_auc_roc(y_true, y_prob):
     return roc_auc_score(y_true, y_prob)

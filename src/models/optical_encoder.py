@@ -1,6 +1,7 @@
 """
 TemporalOpticalEncoder: compact CNN stem plus temporal self-attention for optical frames.
 """
+
 import torch
 import torch.nn as nn
 

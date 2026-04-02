@@ -320,6 +320,7 @@
         <div>
           <h3>Summary</h3>
           <pre id="summary">Waiting for inference...</pre>
+          <p class="section-note" id="inferenceSourceNote">Inference source: waiting for the first run.</p>
         </div>
         <div class="verdict-box primary-verdict-box">
           <div class="verdict-line"><span>Status</span><strong id="verdictStatus">Waiting for inference</strong></div>
@@ -648,6 +649,7 @@
     const verdictAction = document.getElementById('verdictAction');
     const verdictMeter = document.getElementById('verdictMeter');
     const verdictSummary = document.getElementById('verdictSummary');
+    const inferenceSourceNote = document.getElementById('inferenceSourceNote');
     const exportClassPngBtn = document.getElementById('exportClassPngBtn');
     const exportBatchJsonBtn = document.getElementById('exportBatchJsonBtn');
     const exportBatchCsvBtn = document.getElementById('exportBatchCsvBtn');
@@ -812,9 +814,13 @@
       verdictStatus.textContent = verdict.summary || 'Waiting for inference';
       verdictPriority.textContent = verdict.priority || '-';
       verdictAction.textContent = verdict.action || '-';
+      const sourceText = payload.inference_source || verdict.inference_source || payload.decision_basis?.inference_source || 'trained model';
+      if (inferenceSourceNote) {
+        inferenceSourceNote.textContent = `Inference source: ${sourceText}.`;
+      }
       verdictSummary.textContent = verdict.operator_tone
-        ? `${verdict.operator_tone} mode. ${verdict.summary || 'Run inference to see an operator-friendly recommendation.'}`
-        : (verdict.summary || 'Run inference to see an operator-friendly recommendation.');
+        ? `${verdict.operator_tone} mode. ${verdict.summary || 'Run inference to see an operator-friendly recommendation.'} ${verdict.evidence_note || ''}`.trim()
+        : ((verdict.summary || 'Run inference to see an operator-friendly recommendation.') + (verdict.evidence_note ? ` ${verdict.evidence_note}` : ''));
       const score = Math.max(0, Math.min(1, Number(verdict.quality_score) || 0));
       verdictMeter.style.width = `${(score * 100).toFixed(1)}%`;
     };
@@ -862,8 +868,12 @@
           confidence_band: basis.confidence_band,
           operator_profile: basis.operator_profile,
           top_class_probability: basis.top_class_probability,
+          top_class_index: basis.top_class_index,
+          class_gap: basis.class_gap,
+          entropy: basis.entropy,
           hot_pixel_ratio: basis.hot_pixel_ratio,
           bbox_area_ratio: basis.bbox_area_ratio,
+          inference_source: basis.inference_source,
           reason: basis.reason,
         },
         operational_summary: {
@@ -873,8 +883,11 @@
           action: verdict.action,
           quality_score: verdict.quality_score,
           summary: verdict.summary,
+          evidence_note: verdict.evidence_note,
+          inference_source: verdict.inference_source,
         },
         bbox: payload.evidence_visuals?.bbox || null,
+        inference_source: payload.inference_source || verdict.inference_source || basis.inference_source || 'trained model',
       };
     };
 

@@ -63,12 +63,18 @@ def test_concurrent_single_and_batch_paths() -> None:
     def run_batch() -> int:
         res = client.post(
             "/predict_dataset",
-            data={"dataset_dir": "c:/Users/PREM DIWAN/Desktop/ml/images", "modality": "optical", "max_samples": "2"},
+            data={
+                "dataset_dir": "c:/Users/PREM DIWAN/Desktop/ml/images",
+                "modality": "optical",
+                "max_samples": "2",
+            },
         )
         return res.status_code
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        results = list(pool.map(lambda fn: fn(), [run_single, run_single, run_batch, run_single]))
+        results = list(
+            pool.map(lambda fn: fn(), [run_single, run_single, run_batch, run_single])
+        )
 
     assert all(code in (200, 400) for code in results)
 
@@ -76,7 +82,12 @@ def test_concurrent_single_and_batch_paths() -> None:
 def test_generate_slo_report_script() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     script = repo_root / "scripts" / "generate_slo_report.py"
-    proc = subprocess.run([sys.executable, str(script)], cwd=str(repo_root), capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+    )
     assert proc.returncode == 0, proc.stderr
 
     report_path = repo_root / "artifacts" / "reports" / "slo_report.json"

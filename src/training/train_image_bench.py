@@ -18,9 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.data.debris_image_data import ensure_dataset_bootstrap
-from src.data.dataset_manifest import load_dataset_manifest
-from src.training.model_zoo import available_image_backbones, build_image_backbone
+from src.data.debris_image_data import ensure_dataset_bootstrap  # noqa: E402
+from src.data.dataset_manifest import load_dataset_manifest  # noqa: E402
+from src.training.model_zoo import (
+    available_image_backbones,
+    build_image_backbone,
+)  # noqa: E402
 
 
 def _build_model(name: str, num_classes: int) -> nn.Module:
@@ -29,7 +32,9 @@ def _build_model(name: str, num_classes: int) -> nn.Module:
 
 def _metrics(y_true: list[int], y_pred: list[int]) -> dict:
     acc = accuracy_score(y_true, y_pred)
-    p, r, f1, _ = precision_recall_fscore_support(y_true, y_pred, average="weighted", zero_division=0)
+    p, r, f1, _ = precision_recall_fscore_support(
+        y_true, y_pred, average="weighted", zero_division=0
+    )
     return {
         "accuracy": float(acc),
         "precision": float(p),
@@ -38,7 +43,14 @@ def _metrics(y_true: list[int], y_pred: list[int]) -> dict:
     }
 
 
-def _run_epoch(model: nn.Module, loader: DataLoader, optimizer: torch.optim.Optimizer, criterion: nn.Module, device: str, train: bool) -> tuple[float, dict]:
+def _run_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device: str,
+    train: bool,
+) -> tuple[float, dict]:
     if train:
         model.train()
     else:
@@ -82,13 +94,17 @@ def build_reproducible_split_indices(
     if num_samples < 3:
         raise ValueError("num_samples must be >= 3 to produce train/val/test splits")
     if train_ratio <= 0 or val_ratio <= 0 or train_ratio + val_ratio >= 1.0:
-        raise ValueError("train_ratio and val_ratio must be positive and sum to less than 1")
+        raise ValueError(
+            "train_ratio and val_ratio must be positive and sum to less than 1"
+        )
 
     n_train = int(train_ratio * num_samples)
     n_val = int(val_ratio * num_samples)
     n_test = num_samples - n_train - n_val
     if n_train < 1 or n_val < 1 or n_test < 1:
-        raise ValueError("split resulted in an empty partition; adjust ratios or sample count")
+        raise ValueError(
+            "split resulted in an empty partition; adjust ratios or sample count"
+        )
 
     generator = torch.Generator().manual_seed(seed)
     perm = torch.randperm(num_samples, generator=generator).tolist()
@@ -113,25 +129,35 @@ def train_image_bench(
     output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    bootstrap = ensure_dataset_bootstrap(data_root, images_per_class=320, image_size=image_size)
+    bootstrap = ensure_dataset_bootstrap(
+        data_root, images_per_class=320, image_size=image_size
+    )
 
-    train_tf = transforms.Compose([
-        transforms.RandomResizedCrop(image_size, scale=(0.72, 1.0), ratio=(0.85, 1.15)),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.15),
-        transforms.RandomRotation(16),
-        transforms.RandomAutocontrast(p=0.4),
-        transforms.ColorJitter(brightness=0.28, contrast=0.24, saturation=0.15, hue=0.02),
-        transforms.RandomGrayscale(p=0.08),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        transforms.RandomErasing(p=0.12, scale=(0.02, 0.08), ratio=(0.3, 3.0)),
-    ])
-    eval_tf = transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    train_tf = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(
+                image_size, scale=(0.72, 1.0), ratio=(0.85, 1.15)
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.15),
+            transforms.RandomRotation(16),
+            transforms.RandomAutocontrast(p=0.4),
+            transforms.ColorJitter(
+                brightness=0.28, contrast=0.24, saturation=0.15, hue=0.02
+            ),
+            transforms.RandomGrayscale(p=0.08),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.RandomErasing(p=0.12, scale=(0.02, 0.08), ratio=(0.3, 3.0)),
+        ]
+    )
+    eval_tf = transforms.Compose(
+        [
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
     reference_dataset = datasets.ImageFolder(str(data_root), transform=None)
     if len(reference_dataset.classes) < 2:
@@ -158,7 +184,9 @@ def train_image_bench(
             rel_paths = manifest.get("splits", {}).get(split_name, [])
             indices = [rel_to_index[p] for p in rel_paths if p in rel_to_index]
             if not indices:
-                raise ValueError(f"No usable indices for split '{split_name}' from manifest")
+                raise ValueError(
+                    f"No usable indices for split '{split_name}' from manifest"
+                )
             return indices
 
         train_idx = _indices("train")
@@ -173,7 +201,9 @@ def train_image_bench(
             "seed": manifest.get("split_protocol", {}).get("seed"),
         }
     else:
-        split = build_reproducible_split_indices(num_samples=n, train_ratio=0.7, val_ratio=0.15, seed=split_seed)
+        split = build_reproducible_split_indices(
+            num_samples=n, train_ratio=0.7, val_ratio=0.15, seed=split_seed
+        )
         train_idx = split["train"]
         val_idx = split["val"]
         test_idx = split["test"]
@@ -182,13 +212,19 @@ def train_image_bench(
     n_val = len(val_idx)
     n_test = len(test_idx)
 
-    train_ds = Subset(datasets.ImageFolder(str(data_root), transform=train_tf), train_idx)
+    train_ds = Subset(
+        datasets.ImageFolder(str(data_root), transform=train_tf), train_idx
+    )
     val_ds = Subset(datasets.ImageFolder(str(data_root), transform=eval_tf), val_idx)
     test_ds = Subset(datasets.ImageFolder(str(data_root), transform=eval_tf), test_idx)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
+    train_loader = DataLoader(
+        train_ds, batch_size=batch_size, shuffle=True, num_workers=0
+    )
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=0)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=0)
+    test_loader = DataLoader(
+        test_ds, batch_size=batch_size, shuffle=False, num_workers=0
+    )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     class_counts = [0] * len(reference_dataset.classes)
@@ -205,17 +241,25 @@ def train_image_bench(
     results: dict[str, dict] = {}
 
     for model_name in model_names:
-        model = _build_model(model_name, num_classes=len(reference_dataset.classes)).to(device)
+        model = _build_model(model_name, num_classes=len(reference_dataset.classes)).to(
+            device
+        )
         optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4, weight_decay=2e-4)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, epochs))
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=max(1, epochs)
+        )
 
         best_state = None
         best_val_f1 = -1.0
         history: list[dict] = []
 
         for epoch in range(1, epochs + 1):
-            train_loss, train_m = _run_epoch(model, train_loader, optimizer, criterion, device, train=True)
-            val_loss, val_m = _run_epoch(model, val_loader, optimizer, criterion, device, train=False)
+            train_loss, train_m = _run_epoch(
+                model, train_loader, optimizer, criterion, device, train=True
+            )
+            val_loss, val_m = _run_epoch(
+                model, val_loader, optimizer, criterion, device, train=False
+            )
             scheduler.step()
 
             row = {
@@ -228,16 +272,22 @@ def train_image_bench(
                 "val_f1": val_m["f1"],
             }
             history.append(row)
-            print(f"[{model_name}] epoch {epoch}/{epochs} train_f1={train_m['f1']:.4f} val_f1={val_m['f1']:.4f}")
+            print(
+                f"[{model_name}] epoch {epoch}/{epochs} train_f1={train_m['f1']:.4f} val_f1={val_m['f1']:.4f}"
+            )
 
             if val_m["f1"] > best_val_f1:
                 best_val_f1 = val_m["f1"]
-                best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+                best_state = {
+                    k: v.detach().cpu() for k, v in model.state_dict().items()
+                }
 
         if best_state is not None:
             model.load_state_dict(best_state)
 
-        test_loss, test_m = _run_epoch(model, test_loader, optimizer, criterion, device, train=False)
+        test_loss, test_m = _run_epoch(
+            model, test_loader, optimizer, criterion, device, train=False
+        )
 
         ckpt = {
             "model_name": model_name,
@@ -271,8 +321,21 @@ def train_image_bench(
     with (output_root / "image_bench_summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    with (output_root / "image_bench_summary.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["model", "accuracy", "precision", "recall", "f1", "test_loss", "checkpoint"])
+    with (output_root / "image_bench_summary.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "model",
+                "accuracy",
+                "precision",
+                "recall",
+                "f1",
+                "test_loss",
+                "checkpoint",
+            ],
+        )
         writer.writeheader()
         for model_name, stats in results.items():
             writer.writerow(
@@ -291,10 +354,16 @@ def train_image_bench(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train multiple image models on debris dataset")
-    parser.add_argument("--data_dir", type=str, default=r"c:\Users\PREM DIWAN\Desktop\ml\images")
+    parser = argparse.ArgumentParser(
+        description="Train multiple image models on debris dataset"
+    )
+    parser.add_argument(
+        "--data_dir", type=str, default=r"c:\Users\PREM DIWAN\Desktop\ml\images"
+    )
     parser.add_argument("--output_dir", type=str, default="artifacts/image_bench")
-    parser.add_argument("--models", type=str, default=",".join(available_image_backbones()))
+    parser.add_argument(
+        "--models", type=str, default=",".join(available_image_backbones())
+    )
     parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--image_size", type=int, default=224)
