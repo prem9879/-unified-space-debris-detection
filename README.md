@@ -1,8 +1,8 @@
 # Unified Space Debris Detection
 
-Unified multi-modal space debris detection platform with NASA/local data ingest, live and batch inference, model benchmarking, calibration analytics, and release-readiness evidence artifacts.
+Unified multi-modal space debris detection platform for real-world analysis workflows.
 
-Research dashboard and training pipeline for space debris classification, evidence visualization, and model benchmarking.
+This project combines a research-grade dashboard with a practical training and inference pipeline. It helps you ingest NASA and local data, run live and batch predictions, inspect model evidence, and package release-readiness artifacts for review.
 
 ## What this project does
 
@@ -10,7 +10,7 @@ Research dashboard and training pipeline for space debris classification, eviden
 - Runs a deep-learning inference pipeline for debris / non-debris detection.
 - Shows class probabilities, evidence heatmaps, bounding boxes, and activation views.
 - Compares multiple CNN backbones in a benchmark table.
-- Exposes calibration metrics like ECE, Brier score, NLL, and reliability bins.
+- Reports calibration metrics like ECE, Brier score, NLL, and reliability bins.
 - Supports batch dataset inference and PNG / CSV / JSON exports.
 - Provides an RGB analysis panel with histograms and channel statistics.
 - Includes personalized operator profiles for balanced, conservative, and exploratory decision styles.
@@ -189,8 +189,8 @@ Set `USDD_SECURITY_PROFILE=production` to disable legacy static key fallback and
 
 ## Notes
 
-- The benchmark is currently driven by synthetic and locally bootstrapped data.
-- Calibration and uncertainty reporting are included so the model can be evaluated honestly.
+- The benchmark currently uses synthetic and locally bootstrapped data.
+- Calibration and uncertainty reporting are included to support transparent model evaluation.
 - The live decision policy can be tuned per operator profile without changing the underlying model.
 - For real-world deployment, the next step is a labeled debris dataset and calibrated threshold tuning.
 

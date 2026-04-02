@@ -2,7 +2,7 @@
 
 ## Status
 
-The dashboard is running locally and the repository now includes a release-readiness evidence bundle for scientific, reliability, security, and operations review.
+The dashboard is running locally, and this repository now includes a full release-readiness bundle for science, reliability, security, and operations review.
 
 ## Live Dashboard
 
@@ -14,7 +14,7 @@ The dashboard is running locally and the repository now includes a release-readi
 - Immutable dataset manifest and split protocol support.
 - Release-readiness pack generation.
 - Security policy, SLO, and hard-negative indexing artifacts.
-- Blind external evaluation package and procurement docs.
+- Blind external evaluation package and procurement documentation.
 
 ## Evidence Bundle
 
@@ -35,4 +35,4 @@ python scripts/generate_readiness_pack.py
 
 ## Practical Next Step
 
-Use a real labeled debris dataset with a frozen manifest, then regenerate the benchmark card and readiness pack before any external review.
+Use a real labeled debris dataset with a frozen manifest, then regenerate the benchmark card and readiness pack before external review.
