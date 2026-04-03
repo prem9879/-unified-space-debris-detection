@@ -1,0 +1,228 @@
+# Unified Space Debris Detection - Docker Compose Stack
+# Production deployment with all microservices
+
+version: '3.8'
+
+services:
+  # PostgreSQL for time-series TLE data
+  postgres:
+    image: postgres:15-alpine
+    container_name: usdd-postgres
+    environment:
+      POSTGRES_USER: debris_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecurePassword123!}
+      POSTGRES_DB: orbital_data
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployment/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U debris_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - debris_network
+
+  # Redis for real-time caching and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: usdd-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-RedisSecure123!}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - debris_network
+
+  # TimescaleDB extension for PostgreSQL (optimized for time-series)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: usdd-timescaledb
+    environment:
+      POSTGRES_USER: ts_admin
+      POSTGRES_PASSWORD: ${TS_PASSWORD:-TimeSeriesSecure123!}
+      POSTGRES_DB: orbital_telemetry
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ts_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - debris_network
+
+  # Main Flask API server
+  api:
+    build:
+      context: .
+      dockerfile: ./deployment/Dockerfile.api
+    container_name: usdd-api
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://debris_admin:${DB_PASSWORD:-SecurePassword123!}@postgres:5432/orbital_data
+      REDIS_URL: redis://:${REDIS_PASSWORD:-RedisSecure123!}@redis:6379/0
+      TIMESCALE_URL: postgresql://ts_admin:${TS_PASSWORD:-TimeSeriesSecure123!}@timescaledb:5432/orbital_telemetry
+      PYTHONUNBUFFERED: 1
+      TLE_UPDATE_INTERVAL: 3600
+      CELEST_TRACK_API_KEY: ${CELESTRAK_API_KEY:-}
+      SPACE_TRACK_USERNAME: ${SPACE_TRACK_USER:-}
+      SPACE_TRACK_PASSWORD: ${SPACE_TRACK_PASS:-}
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - ./artifacts:/app/artifacts
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # Trajectory prediction worker (LSTM/Transformer service)
+  trajectory-worker:
+    build:
+      context: .
+      dockerfile: ./deployment/Dockerfile.trajectory
+    container_name: usdd-trajectory-worker
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-RedisSecure123!}@redis:6379/1
+      MODEL_PATH: /app/models/trajectory_predictor.pt
+      BATCH_SIZE: 32
+      DEVICE: cuda  # GPU if available
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./artifacts:/app/artifacts
+    depends_on:
+      - redis
+      - api
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # Real-time conjunction detector worker
+  conjunction-detector:
+    build:
+      context: .
+      dockerfile: ./deployment/Dockerfile.conjunction
+    container_name: usdd-conjunction-detector
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-RedisSecure123!}@redis:6379/2
+      TIMESCALE_URL: postgresql://ts_admin:${TS_PASSWORD:-TimeSeriesSecure123!}@timescaledb:5432/orbital_telemetry
+      ALERT_THRESHOLD: 0.7
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./src:/app/src
+      - ./artifacts:/app/artifacts
+    depends_on:
+      - redis
+      - timescaledb
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # TLE data ingestion service
+  tle-ingester:
+    build:
+      context: .
+      dockerfile: ./deployment/Dockerfile.tle
+    container_name: usdd-tle-ingester
+    environment:
+      TIMESCALE_URL: postgresql://ts_admin:${TS_PASSWORD:-TimeSeriesSecure123!}@timescaledb:5432/orbital_telemetry
+      REDIS_URL: redis://:${REDIS_PASSWORD:-RedisSecure123!}@redis:6379/0
+      FETCH_INTERVAL_HOURS: 6
+      CELESTRAK_API_KEY: ${CELESTRAK_API_KEY:-}
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    depends_on:
+      - timescaledb
+      - redis
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # Prometheus metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: usdd-prometheus
+    volumes:
+      - ./deployment/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: usdd-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-Admin123!}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployment/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+  # Nginx reverse proxy and load balancer
+  nginx:
+    image: nginx:alpine
+    container_name: usdd-nginx
+    volumes:
+      - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    networks:
+      - debris_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  timescale_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  debris_network:
+    driver: bridge

@@ -1,0 +1,419 @@
+---
+# Unified Space Debris Detection - Kubernetes Deployment on AWS EKS/GCP GKE
+# Production-grade infrastructure with autoscaling, monitoring, and disaster recovery
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: space-debris
+  labels:
+    environment: production
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: usdd-config
+  namespace: space-debris
+data:
+  TLE_UPDATE_INTERVAL: "3600"
+  CONJUNCTION_ALERT_THRESHOLD: "0.7"
+  TRAJECTORY_PREDICTION_HORIZON: "24"
+  LOG_LEVEL: "INFO"
+
+---
+# Secrets for sensitive credentials (use sealed-secrets in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: usdd-secrets
+  namespace: space-debris
+type: Opaque
+stringData:
+  DATABASE_PASSWORD: "${DB_PASSWORD}"
+  REDIS_PASSWORD: "${REDIS_PASSWORD}"
+  SPACE_TRACK_USERNAME: "${SPACE_TRACK_USER}"
+  SPACE_TRACK_PASSWORD: "${SPACE_TRACK_PASS}"
+
+---
+# PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: space-debris
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: debris_admin
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: usdd-secrets
+              key: DATABASE_PASSWORD
+        - name: POSTGRES_DB
+          value: orbital_data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U debris_admin
+          initialDelaySeconds: 30
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp2"
+      resources:
+        requests:
+          storage: 50Gi
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: space-debris
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - "--appendonly"
+        - "yes"
+        - "--requirepass"
+        - "$(REDIS_PASSWORD)"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: usdd-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: redis-storage
+        emptyDir: {}
+
+---
+# Flask API Deployment with autoscaling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: space-debris
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: api
+        image: REGISTRY/unified-debris-detection:api-latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://debris_admin:$(DB_PASSWORD)@postgres:5432/orbital_data"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: usdd-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: usdd-secrets
+              key: REDIS_PASSWORD
+        - name: FLASK_ENV
+          value: "production"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        envFrom:
+        - configMapRef:
+            name: usdd-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 5000
+          initialDelaySeconds: 20
+          periodSeconds: 5
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+
+---
+# HorizontalPodAutoscaler for API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: space-debris
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+# Trajectory Prediction Worker StatefulSet (GPU)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: trajectory-worker
+  namespace: space-debris
+spec:
+  serviceName: trajectory-worker
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trajectory-worker
+  template:
+    metadata:
+      labels:
+        app: trajectory-worker
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu
+      containers:
+      - name: worker
+        image: REGISTRY/unified-debris-detection:trajectory-latest
+        env:
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/1"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: usdd-secrets
+              key: REDIS_PASSWORD
+        - name: DEVICE
+          value: "cuda"
+        - name: BATCH_SIZE
+          value: "32"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: "1"
+
+---
+# Service for API
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: space-debris
+  labels:
+    app: api
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 5000
+    protocol: TCP
+    name: https
+  selector:
+    app: api
+  sessionAffinity: ClientIP
+
+---
+# Ingress for API (AWS ALB or GCP Cloud LoadBalancer)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: space-debris
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/target-type: "ip"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:..."
+spec:
+  tls:
+  - hosts:
+    - debris.example.com
+    secretName: api-tls
+  rules:
+  - host: debris.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 80
+
+---
+# NetworkPolicy for internal communication only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: usdd-network-policy
+  namespace: space-debris
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: space-debris
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: space-debris
+
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-pdb
+  namespace: space-debris
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-monitor
+  namespace: space-debris
+spec:
+  selector:
+    matchLabels:
+      app: api
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics

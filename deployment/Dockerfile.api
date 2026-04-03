@@ -1,0 +1,52 @@
+# Production Dockerfile for Flask API Server
+# Multi-stage build for optimization
+
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    gfortran \
+    libopenblas-dev \
+    liblapack-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Final stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libopenblas0 \
+    liblapack3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python dependencies from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy application code
+COPY src ./src
+COPY configs ./configs
+COPY webapp ./webapp
+
+# Create non-root user for security
+RUN useradd -m -u 1000 debrisuser && \
+    chown -R debrisuser:debrisuser /app
+USER debrisuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/healthz || exit 1
+
+# Run Flask app with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", \
+     "--worker-class", "sync", "--timeout", "120", \
+     "--access-logfile", "-", "--error-logfile", "-", \
+     "webapp.flask_app:app"]
