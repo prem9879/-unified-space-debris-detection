@@ -20,10 +20,10 @@ if str(ROOT) not in sys.path:
 
 from src.data.debris_image_data import ensure_dataset_bootstrap  # noqa: E402
 from src.data.dataset_manifest import load_dataset_manifest  # noqa: E402
-from src.training.model_zoo import (
+from src.training.model_zoo import (  # noqa: E402
     available_image_backbones,
     build_image_backbone,
-)  # noqa: E402
+)
 
 
 def _build_model(name: str, num_classes: int) -> nn.Module:
