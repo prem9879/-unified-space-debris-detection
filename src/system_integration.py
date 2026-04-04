@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class UnifiedDebrisDetectionSystem:
     """Main orchestrator for the complete space debris detection pipeline."""
 
-    def __init__(self):
+    def __init__(self, compute_profile: str = "balanced"):
         """Initialize the unified system."""
         self.tle_fetcher = None
         self.trajectory_predictor = None
@@ -34,6 +34,9 @@ class UnifiedDebrisDetectionSystem:
         self.realtime_monitor = None
         self.orbital_visualizer = None
         self.kessler_model = None
+        self.sensor_fusion = None
+        self.mission_control = None
+        self.compute_profile = compute_profile
 
         self.last_update = None
         self.debris_catalog = {}
@@ -63,13 +66,18 @@ class UnifiedDebrisDetectionSystem:
                 KesslerSyndromeModel,
             )
             from src.visualization.orbital_visualizer import DashboardDataProvider
+            from src.deployment.operational_bridge import (
+                MissionControlBridge,
+                SensorFusionBridge,
+            )
 
             logger.info("✓ Initializing TLE Pipeline...")
             self.tle_stream = RealTimeTLEStream(fetch_interval_hours=6)
 
             logger.info("✓ Initializing Trajectory Predictor...")
+            d_model = 64 if self.compute_profile == "low_compute" else 128
             self.trajectory_predictor = TransformerTrajectoryPredictor(
-                input_size=14, d_model=128
+                input_size=14, d_model=d_model
             )
 
             logger.info("✓ Initializing Real-Time Monitor...")
@@ -80,6 +88,14 @@ class UnifiedDebrisDetectionSystem:
 
             logger.info("✓ Initializing Kessler Syndrome Model...")
             self.kessler_model = KesslerSyndromeModel(initial_debris_count=34000)
+
+            logger.info("✓ Initializing Sensor Fusion Bridge...")
+            self.sensor_fusion = SensorFusionBridge()
+
+            logger.info("✓ Initializing Mission Control Bridge...")
+            self.mission_control = MissionControlBridge(
+                require_human_approval=True,
+            )
 
             self.system_status = "READY"
             logger.info("✓ ALL COMPONENTS INITIALIZED SUCCESSFULLY")
@@ -147,26 +163,33 @@ class UnifiedDebrisDetectionSystem:
             objects = list(self.debris_catalog.values())[:sample_size]
             n = len(objects)
 
-            # Pairwise conjunction computation
+            max_pairs_by_profile = {
+                "low_compute": 25000,
+                "balanced": 100000,
+                "high_accuracy": 300000,
+            }
+            max_pairs = max_pairs_by_profile.get(self.compute_profile, 100000)
+
+            candidate_pairs = self.tle_stream.shortlist_conjunction_candidates(
+                objects,
+                max_pairs=max_pairs,
+            )
+
             high_risk_pairs = []
-            total_pairs = 0
+            for i, j in candidate_pairs:
+                risk = self.tle_stream.engineer.compute_conjunction_risk(
+                    objects[i], objects[j]
+                )
 
-            for i in range(n):
-                for j in range(i + 1, n):
-                    total_pairs += 1
-                    risk = self.tle_stream.engineer.compute_conjunction_risk(
-                        objects[i], objects[j]
+                if risk > 0.6:  # Significant risk threshold
+                    high_risk_pairs.append(
+                        {
+                            "object1_id": objects[i]["norad_cat_id"],
+                            "object2_id": objects[j]["norad_cat_id"],
+                            "conjunction_risk": float(risk),
+                            "timestamp": datetime.now().isoformat(),
+                        }
                     )
-
-                    if risk > 0.6:  # Significant risk threshold
-                        high_risk_pairs.append(
-                            {
-                                "object1_id": objects[i]["norad_cat_id"],
-                                "object2_id": objects[j]["norad_cat_id"],
-                                "conjunction_risk": float(risk),
-                                "timestamp": datetime.now().isoformat(),
-                            }
-                        )
 
             self.active_alerts = sorted(
                 high_risk_pairs,
@@ -175,18 +198,62 @@ class UnifiedDebrisDetectionSystem:
             )[:50]
 
             logger.info(
-                f"✓ Analyzed {total_pairs} pairs, found {len(self.active_alerts)} high-risk"
+                f"✓ Screened {len(candidate_pairs)} candidate pairs, found {len(self.active_alerts)} high-risk"
             )
+
+            theoretical_pairs = n * (n - 1) // 2
+            reduction_pct = 0.0
+            if theoretical_pairs > 0:
+                reduction_pct = 100.0 * (1.0 - len(candidate_pairs) / theoretical_pairs)
 
             return {
                 "status": "success",
-                "pairs_analyzed": total_pairs,
+                "pairs_analyzed": len(candidate_pairs),
+                "theoretical_pairs": theoretical_pairs,
+                "screening_reduction_percent": float(reduction_pct),
                 "high_risk_pairs": len(self.active_alerts),
                 "top_alerts": self.active_alerts[:10],
+                "compute_profile": self.compute_profile,
             }
         except Exception as e:
             logger.error(f"Conjunction computation failed: {e}")
             return {"status": "failed", "reason": str(e)}
+
+    async def ingest_external_sensor_data(
+        self,
+        radar_observations: list[Any],
+        optical_observations: list[Any],
+    ) -> dict[str, Any]:
+        """Fuse external sensor observations into the active catalog."""
+        if not self.sensor_fusion:
+            return {"status": "failed", "reason": "sensor bridge not initialized"}
+        if not self.debris_catalog:
+            return {"status": "failed", "reason": "empty catalog"}
+
+        result = self.sensor_fusion.fuse_into_catalog(
+            self.debris_catalog,
+            radar_observations=radar_observations,
+            optical_observations=optical_observations,
+        )
+        return result
+
+    def propose_maneuver_command(
+        self,
+        norad_id: int,
+        delta_v_rtn_km_s: tuple[float, float, float],
+        execute_at: datetime,
+        approved_by: str | None = None,
+    ) -> dict[str, Any]:
+        """Create and policy-check a maneuver command packet."""
+        if not self.mission_control:
+            return {"status": "failed", "reason": "mission control not initialized"}
+
+        packet = self.mission_control.build_maneuver_command(
+            norad_id=norad_id,
+            delta_v_rtn_km_s=delta_v_rtn_km_s,
+            execute_at=execute_at,
+        )
+        return self.mission_control.authorize_command(packet, approved_by=approved_by)
 
     async def generate_dashboard_snapshot(self) -> dict[str, Any]:
         """Generate complete dashboard visualization data.
@@ -247,7 +314,10 @@ class UnifiedDebrisDetectionSystem:
                     "orbital_visualizer": (
                         "READY" if self.orbital_visualizer else "NOT_INIT"
                     ),
+                    "sensor_fusion": "READY" if self.sensor_fusion else "NOT_INIT",
+                    "mission_control": "READY" if self.mission_control else "NOT_INIT",
                 },
+                "compute_profile": self.compute_profile,
                 "kessler_risk": (
                     self.kessler_model.estimate_cascading_collision_risk()
                     if self.kessler_model

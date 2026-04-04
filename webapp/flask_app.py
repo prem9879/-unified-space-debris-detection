@@ -693,6 +693,190 @@ def _load_service() -> UnifiedInferenceService:
     return service
 
 
+def _load_json_if_exists(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _risk_band(score: float) -> str:
+    if score >= 0.7:
+        return "HIGH"
+    if score >= 0.35:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _build_orbital_brief() -> dict[str, object]:
+    eval_report = _load_json_if_exists(REPORT)
+    benchmark_report = _load_json_if_exists(ROOT / "artifacts" / "image_bench" / "image_bench_summary.json")
+
+    architecture = [
+        {
+            "step": "1. Ingest",
+            "title": "Real-time orbital intake",
+            "detail": "Pull TLEs from CelesTrak / Space-Track, then attach provenance, epoch, and shell metadata.",
+        },
+        {
+            "step": "2. Preprocess",
+            "title": "Orbital feature extraction",
+            "detail": "Convert raw TLE rows into altitude, semi-major axis, drag proxy, cyclic angles, and orbit-shell cues.",
+        },
+        {
+            "step": "3. Predict",
+            "title": "Multi-model reasoning",
+            "detail": "Use LSTM / GRU for trajectories, Transformer for long-horizon sequences, and XGBoost as a stable baseline.",
+        },
+        {
+            "step": "4. Fuse",
+            "title": "Physics + AI collision engine",
+            "detail": "Screen by orbital proximity first, then fuse learned risk with relative velocity and conjunction geometry.",
+        },
+        {
+            "step": "5. Visualize",
+            "title": "3D orbital deck",
+            "detail": "Render Earth, orbit shells, debris points, and alerts with WebGL / Three.js style motion.",
+        },
+    ]
+
+    model_stack = [
+        {
+            "name": "LSTM / GRU",
+            "use": "Trajectory forecasting",
+            "why": "Good at orbital time sequences with limited data, cheap to train, easy to explain.",
+            "tradeoff": "Struggles with long-range dependencies and regime changes.",
+        },
+        {
+            "name": "Transformer",
+            "use": "Long-horizon sequence modeling",
+            "why": "Captures repeated orbital patterns and global context better than a plain recurrent net.",
+            "tradeoff": "Heavier compute and more sensitive to sparse datasets.",
+        },
+        {
+            "name": "XGBoost / Random Forest",
+            "use": "Fast baseline classifier",
+            "why": "Strong on tabular orbital features and useful when the neural stack is not confident.",
+            "tradeoff": "No real sequence understanding.",
+        },
+        {
+            "name": "CNN / YOLO",
+            "use": "Image-based debris detection",
+            "why": "Useful when optical or radar imagery is available for object localization.",
+            "tradeoff": "Does not solve orbital propagation by itself.",
+        },
+    ]
+
+    deployment_stack = {
+        "backend": "Flask today, FastAPI-ready if the system needs async endpoints and stricter schema contracts.",
+        "frontend": "Server-rendered Flask UI now, with a clean migration path to React / Next.js for richer mission views.",
+        "database": "PostgreSQL for catalog and audit data, Redis for live queues and cached orbit snapshots.",
+        "cloud": "AWS or GCP depending on the team; GPU workers for inference, CPU workers for ingestion, and object storage for artifacts.",
+        "api": [
+            "/healthz",
+            "/readyz",
+            "/options",
+            "/predict",
+            "/predict_dataset",
+            "/calibration_report",
+            "/orbital_brief",
+            "/orbital_scene",
+        ],
+    }
+
+    sample_objects = [
+        {"norad_cat_id": 25544, "name": "ISS", "altitude_km": 408.0, "inclination_deg": 51.6, "relative_velocity_km_s": 7.66, "collision_density": 0.18, "shell": "LEO"},
+        {"norad_cat_id": 43013, "name": "DEBRIS-A", "altitude_km": 612.0, "inclination_deg": 97.4, "relative_velocity_km_s": 10.8, "collision_density": 0.41, "shell": "LEO"},
+        {"norad_cat_id": 39120, "name": "DEBRIS-B", "altitude_km": 799.0, "inclination_deg": 98.0, "relative_velocity_km_s": 11.2, "collision_density": 0.58, "shell": "LEO"},
+        {"norad_cat_id": 40294, "name": "DEBRIS-C", "altitude_km": 2020.0, "inclination_deg": 63.4, "relative_velocity_km_s": 8.2, "collision_density": 0.27, "shell": "MEO"},
+        {"norad_cat_id": 45678, "name": "DEBRIS-D", "altitude_km": 35786.0, "inclination_deg": 0.2, "relative_velocity_km_s": 3.1, "collision_density": 0.19, "shell": "GEO"},
+        {"norad_cat_id": 49812, "name": "DEBRIS-E", "altitude_km": 1180.0, "inclination_deg": 71.0, "relative_velocity_km_s": 9.7, "collision_density": 0.63, "shell": "LEO"},
+    ]
+
+    scene_objects = []
+    collision_alerts = []
+    for index, obj in enumerate(sample_objects):
+        base_risk = 0.38 * obj["collision_density"] + 0.25 * (obj["relative_velocity_km_s"] / 12.0) + 0.22 * (obj["inclination_deg"] / 180.0)
+        shell_bonus = 0.18 if obj["shell"] == "LEO" else (0.10 if obj["shell"] == "MEO" else 0.06)
+        risk_score = max(0.0, min(1.0, base_risk + shell_bonus))
+        band = _risk_band(risk_score)
+        record = {
+            **obj,
+            "risk_score": round(risk_score, 3),
+            "risk_band": band,
+            "size": 0.55 if obj["shell"] == "LEO" else 0.42 if obj["shell"] == "MEO" else 0.33,
+            "color": "#35d1ff" if band == "LOW" else "#fbbf24" if band == "MEDIUM" else "#ff5d5d",
+            "orbit_phase": round((index + 1) / len(sample_objects), 3),
+        }
+        scene_objects.append(record)
+        if band != "LOW":
+            collision_alerts.append(
+                {
+                    "object": obj["name"],
+                    "norad_cat_id": obj["norad_cat_id"],
+                    "risk_band": band,
+                    "risk_score": round(risk_score, 3),
+                    "recommended_action": "Track closely" if band == "MEDIUM" else "Escalate conjunction review",
+                }
+            )
+
+    collision_alerts = sorted(collision_alerts, key=lambda item: item["risk_score"], reverse=True)
+
+    research_edges = {
+        "unique_contribution": "A physics-gated, multimodal collision intelligence stack that mixes orbital screening, learned sequence models, and explainable risk bands.",
+        "paper_titles": [
+            "Unified Space Debris Intelligence for Physics-Gated Collision Prediction",
+            "Multimodal Orbital Risk Fusion for Real-Time Space Safety",
+            "From TLE Streams to Conjunction Alerts: A Research-Grade Operational Pipeline",
+        ],
+        "metrics": ["AUC-ROC", "PR-AUC", "ECE", "Brier score", "lead time to alert", "false alert rate", "orbit RMSE"],
+        "comparison": [
+            "Pure SGP4 propagation: fast but not decision-aware.",
+            "Pure deep learning: flexible but brittle under sparse orbital data.",
+            "This system: hybrid, auditable, and usable in operations.",
+        ],
+    }
+
+    if not eval_report:
+        eval_report = {"status": "unavailable", "note": "No evaluation artifact found yet."}
+
+    return {
+        "architecture": architecture,
+        "model_stack": model_stack,
+        "collision_engine": {
+            "mode": "physics-first + AI fusion",
+            "thresholds": {"low": 0.35, "medium": 0.7, "high": 1.0},
+            "reasoning": [
+                "We shortlist by orbital shell and inclination before scoring, because full pairwise search does not scale.",
+                "Relative velocity matters, but only after proximity and shell context have already reduced the candidate set.",
+                "The final risk band is intentionally conservative; false confidence is worse than a missed visual flourish.",
+            ],
+        },
+        "realtime": {
+            "ingest": "APIs / webhooks / scheduled TLE pulls",
+            "stream": "Redis or Kafka for live score updates",
+            "updates": "Continuous re-scoring on new catalog snapshots and sensor fusion events",
+        },
+        "visualization": {
+            "scene": scene_objects,
+            "alerts": collision_alerts[:4],
+            "shells": [
+                {"name": "LEO", "radius": 1.35, "color": "#35d1ff"},
+                {"name": "MEO", "radius": 2.1, "color": "#7dd3fc"},
+                {"name": "GEO", "radius": 2.85, "color": "#a5b4fc"},
+            ],
+        },
+        "deployment": deployment_stack,
+        "research": research_edges,
+        "metrics_snapshot": {
+            "benchmark": benchmark_report.get("num_samples", 0) if benchmark_report else 0,
+            "eval": eval_report,
+        },
+    }
+
+
 @app.get("/")
 def home():
     report = {}
@@ -1225,6 +1409,24 @@ def preview_nasa_solarflux():
         "numeric_columns": numeric_cols,
     }
     return jsonify({"summary": summary, "head": head})
+
+
+@app.get("/orbital_brief")
+def orbital_brief():
+    return jsonify(_build_orbital_brief())
+
+
+@app.get("/orbital_scene")
+def orbital_scene():
+    brief = _build_orbital_brief()
+    return jsonify(
+        {
+            "timestamp": float(time.time()),
+            "scene": brief.get("visualization", {}).get("scene", []),
+            "shells": brief.get("visualization", {}).get("shells", []),
+            "alerts": brief.get("visualization", {}).get("alerts", []),
+        }
+    )
 
 
 if __name__ == "__main__":

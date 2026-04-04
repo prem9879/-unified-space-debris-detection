@@ -1,20 +1,26 @@
-# Unified Space Debris Detection
+# Unified Space Debris Intelligence & Collision Prediction System
 
-Unified multi-modal space debris detection platform for real-world analysis workflows.
+Unified multi-modal space debris intelligence platform for real-world orbital safety workflows.
 
-This project combines a research-grade dashboard with a practical training and inference pipeline. It helps you ingest NASA and local data, run live and batch predictions, inspect model evidence, and package release-readiness artifacts for review.
+This repository started as a debris detector and grew into a collision-intelligence system. The current version is intentionally hybrid: physics does the first-pass filtering, ML does the nuanced ranking, and the UI focuses on operator clarity instead of model hype.
+
+This project combines a research-grade dashboard with a practical training, inference, and orbital-risk pipeline. It helps you ingest TLE and imagery data, engineer physically meaningful orbital features, run live and batch predictions, inspect model evidence, and package release-readiness artifacts for review.
+
+What this is: a serious build for demos, papers, and productization.
+What this is not: a toy notebook with a single accuracy score.
 
 ## What this project does
 
-- Loads optical and radar images from local folders.
-- Runs a deep-learning inference pipeline for debris / non-debris detection.
-- Shows class probabilities, evidence heatmaps, bounding boxes, and activation views.
-- Compares multiple CNN backbones in a benchmark table.
+- Ingests TLE catalogs from CelesTrak / Space-Track and local imagery folders.
+- Engineers orbital features such as altitude, inclination, perigee, apogee, cyclic angles, drag proxy, and shell density.
+- Runs a multimodal inference pipeline for debris detection, collision risk, and trajectory reasoning.
+- Shows risk surfaces, evidence heatmaps, bounding overlays, and activation views.
+- Compares multiple CNN and orbital baselines in a benchmark table.
 - Reports calibration metrics like ECE, Brier score, NLL, and reliability bins.
 - Supports batch dataset inference and PNG / CSV / JSON exports.
 - Provides an RGB analysis panel with histograms and channel statistics.
 - Includes personalized operator profiles for balanced, conservative, and exploratory decision styles.
-- Exposes a custom multimodal debris model with radar, optical, and physics encoders.
+- Exposes a custom multimodal debris model with radar, optical, physics, and orbital encoders.
 
 ## Model zoo
 
@@ -42,13 +48,13 @@ The benchmark currently trains and compares these backbones:
 
 ## How the pipeline works
 
-1. Preprocess the input image with resizing, normalization, thresholding, and band selection.
-2. Feed the tensor into a trained CNN backbone.
-3. Compute debris probability, collision risk, and class probabilities.
-4. Generate heatmaps, overlays, and layer activation visuals.
-5. Attach a decision basis with uncertainty band, operator profile, and explanation.
-6. Convert the raw outputs into a personalized operational verdict.
-7. Optionally score calibration on labeled local data.
+1. Ingest TLE and image data, then normalize object metadata into one canonical catalog.
+2. Engineer orbital features such as altitude, shell distance, inclination risk, and cyclic orbital encodings.
+3. Feed time-series and orbital features into sequence models, while CNN and tree baselines handle fast classification and imagery.
+4. Compute physics-grounded collision priors and combine them with learned scores.
+5. Generate heatmaps, overlays, orbit-shell summaries, and layer activation visuals.
+6. Attach a decision basis with uncertainty band, operator profile, and explanation.
+7. Convert the raw outputs into a personalized operational verdict and exportable research packet.
 
 ## Local setup
 
@@ -206,6 +212,7 @@ Set `USDD_SECURITY_PROFILE=production` to disable legacy static key fallback and
 - Security architecture brief: `docs/SECURITY_ARCHITECTURE_BRIEF.md`
 - Uptime and incident response: `docs/UPTIME_INCIDENT_RESPONSE.md`
 - Procurement dossier checklist: `docs/PROCUREMENT_DOSSIER.md`
+- Product and research brief: `docs/SPACE_DEBRIS_PRODUCT_BRIEF.md`
 - External blind eval protocol: `external_validation/BLIND_EVAL_PROTOCOL.md`
 - Readiness scorecard: `docs/READINESS_SCORECARD.md`
 

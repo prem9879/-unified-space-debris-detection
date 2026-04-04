@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Unified Space Debris Detection</title>
+  <title>Unified Space Debris Intelligence &amp; Collision Prediction System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -131,48 +131,84 @@
     <nav class="workflow-rail" aria-label="Workflow tabs">
       <button type="button" class="workflow-tab is-active" data-workflow-tab="ingest">
         <span>01</span>
-        <strong>Ingest</strong>
-        <small>Load NASA data or your own folder</small>
+        <strong>TLE Intake</strong>
+        <small>Ingest CelesTrak, Space-Track, and local catalogs</small>
       </button>
       <button type="button" class="workflow-tab" data-workflow-tab="infer">
         <span>02</span>
-        <strong>Infer</strong>
-        <small>Run one image and inspect the result</small>
+        <strong>Fusion Engine</strong>
+        <small>Blend orbital physics with multimodal AI</small>
       </button>
       <button type="button" class="workflow-tab" data-workflow-tab="analyze">
         <span>03</span>
-        <strong>Analyze</strong>
-        <small>Review charts, calibration, and risk</small>
+        <strong>Orbital Deck</strong>
+        <small>Inspect 3D tracks, alerts, and uncertainty</small>
       </button>
       <button type="button" class="workflow-tab" data-workflow-tab="export">
         <span>04</span>
-        <strong>Export</strong>
-        <small>Package evidence and chart outputs</small>
+        <strong>Research Pack</strong>
+        <small>Export evidence for paper and deployment</small>
       </button>
     </nav>
 
     <main class="container workflow-root">
     <section class="hero panel workflow-panel is-active" data-workflow-panel="ingest">
       <div class="hero-copy">
-        <div class="eyebrow">Unified Multi-Modal Workspace</div>
-        <h1>Detect and analyze space debris with one clear, guided workspace.</h1>
+        <div class="eyebrow">Operational Space Safety Stack</div>
+        <h1>Unified Space Debris Intelligence &amp; Collision Prediction System</h1>
         <p>
-          Load NASA ODPO data, explore your own datasets, inspect preprocessing, and run inference on single images
-          or entire folders without switching tools.
+          Real-time TLE intake, orbital feature engineering, multimodal AI, and collision-risk scoring in one
+          mission console. The system is built to feel like a flight-deck tool, not a demo.
         </p>
         <div class="hero-actions">
-          <button id="heroLoadAllBtn" type="button">Load Everything</button>
-          <button id="heroExplorerBtn" type="button" class="secondary-btn">Open Dataset Explorer</button>
+          <button id="heroLoadAllBtn" type="button">Open Mission Stack</button>
+          <button id="heroExplorerBtn" type="button" class="secondary-btn">Inspect Orbital Catalog</button>
         </div>
       </div>
       <div class="hero-stats">
-        <div class="stat-chip"><span>Model</span><strong>Fusion Net</strong></div>
-        <div class="stat-chip"><span>Data</span><strong>NASA + Local</strong></div>
-        <div class="stat-chip"><span>Views</span><strong>Gallery + Layer</strong></div>
-        <div class="stat-chip"><span>Status</span><strong>{% if checkpoint_exists %}Ready{% else %}Waiting Checkpoint{% endif %}</strong></div>
+        <div class="stat-chip"><span>TLE Streams</span><strong>CelesTrak / Space-Track</strong></div>
+        <div class="stat-chip"><span>Risk Engine</span><strong>Physics + AI Fusion</strong></div>
+        <div class="stat-chip"><span>Visualization</span><strong>3D Shell Deck</strong></div>
+        <div class="stat-chip"><span>Status</span><strong>{% if checkpoint_exists %}Ready{% else %}Awaiting Checkpoint{% endif %}</strong></div>
         <div class="stat-chip"><span>Security</span><strong id="securityModeChip">Checking...</strong></div>
         <div class="stat-chip"><span>Access</span><strong id="accessRoleChip">Checking...</strong></div>
       </div>
+    </section>
+
+    <section class="mission-grid workflow-panel" data-workflow-panel="ingest">
+      <article class="blueprint-card blueprint-card-featured">
+        <div class="eyebrow">System thesis</div>
+        <h2>Physics-first. AI-second. Human judgement always stays in the loop.</h2>
+        <p>
+          We shortlist objects with orbital mechanics, then let deep models rank risk, trajectory drift, and
+          uncertainty. That keeps the system defensible when the network is noisy or the feed is incomplete.
+        </p>
+      </article>
+      <article class="blueprint-card">
+        <span class="blueprint-index">01</span>
+        <h3>Live ingestion</h3>
+        <p>CelesTrak, Space-Track, and local imagery flow into a canonical catalog with epoch, provenance, and shell tags.</p>
+      </article>
+      <article class="blueprint-card">
+        <span class="blueprint-index">02</span>
+        <h3>Orbital features</h3>
+        <p>Semi-major axis, altitude, inclination, drag proxies, cyclic angles, and relative-distance cues are normalized for learning.</p>
+      </article>
+      <article class="blueprint-card">
+        <span class="blueprint-index">03</span>
+        <h3>Multimodal AI</h3>
+        <p>LSTM / GRU and Transformer models handle sequence prediction, while XGBoost and CNN / YOLO provide fast, interpretable baselines.</p>
+      </article>
+      <article class="blueprint-card">
+        <span class="blueprint-index">04</span>
+        <h3>Collision engine</h3>
+        <p>Physics gating, relative-velocity checks, and learned scores fuse into a low / medium / high risk band with audit-ready reasoning.</p>
+      </article>
+      <article class="blueprint-card">
+        <span class="blueprint-index">05</span>
+        <h3>Real-time delivery</h3>
+        <p>Streaming updates are pushed into alerts, dashboards, and exportable research packs without blocking the operator flow.</p>
+      </article>
     </section>
 
     <section class="grid metrics workflow-panel" data-workflow-panel="ingest">
@@ -190,21 +226,21 @@
     </section>
 
     <section class="card form-card workflow-panel" data-workflow-panel="ingest">
-      <h2>AI Pipeline: How All Algorithms Work</h2>
-      <p class="section-note">Use this view to understand the system before you run inference. The advanced controls are intentionally separated from the core flow.</p>
+      <h2>Research Pipeline: How Physics and AI Share the Work</h2>
+      <p class="section-note">Use this view to see where the orbital math ends and the learned models begin. The separation is intentional because pure ML was not stable enough on sparse or noisy passes.</p>
       <ol id="algoSteps" class="algo-steps"></ol>
-      <div class="pipeline-diagram" aria-label="Pipeline architecture diagram">
-        <div class="pipeline-node input"><strong>Input</strong><span>Optical, radar, physics</span></div>
+        <div class="pipeline-diagram" aria-label="Pipeline architecture diagram">
+        <div class="pipeline-node input"><strong>Input</strong><span>TLE, radar, imagery, metadata</span></div>
         <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node preprocess"><strong>Preprocess</strong><span>Resize, band select, normalize</span></div>
+        <div class="pipeline-node preprocess"><strong>Preprocess</strong><span>Parse, clean, shell-tag, normalize</span></div>
         <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node encoders"><strong>Encoders</strong><span>Radar, temporal optical, physics</span></div>
+        <div class="pipeline-node encoders"><strong>Encoders</strong><span>LSTM / GRU, Transformer, CNN, XGBoost</span></div>
         <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node fusion"><strong>Fusion</strong><span>Attention + modality gating</span></div>
+        <div class="pipeline-node fusion"><strong>Fusion</strong><span>Physics gate + calibrated confidence</span></div>
         <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node heads"><strong>Heads</strong><span>Detection, class, orbit, collision</span></div>
+        <div class="pipeline-node heads"><strong>Heads</strong><span>Trajectory, classification, risk, alert</span></div>
         <div class="pipeline-arrow">→</div>
-        <div class="pipeline-node output"><strong>Output</strong><span>Charts, overlays, calibration</span></div>
+        <div class="pipeline-node output"><strong>Output</strong><span>3D deck, alerts, papers, exports</span></div>
       </div>
       <div class="table-wrap">
         <table class="model-table">
@@ -224,7 +260,7 @@
     </section>
 
     <section class="card form-card workflow-panel" data-workflow-panel="ingest">
-      <h2>Live Inference</h2>
+        <h2>Live Inference</h2>
       <p class="section-note">Core inputs stay visible first. Advanced options are collapsed so first-time users can move straight to a result.</p>
       {% if not checkpoint_exists %}
       <p class="warn">Checkpoint missing. Run: python main_train.py</p>
@@ -425,33 +461,77 @@
 
     <section class="grid outputs workflow-panel" data-workflow-panel="analyze">
       <div class="card outputs-intro card-span-2">
+        <h2>Orbital Mission Deck</h2>
+        <p class="section-note">This panel is the 3D-facing part of the system. It shows orbit shells, scene context, and the current collision-alert queue before the charts below.</p>
+      </div>
+      <article class="card card-span-2 orbital-scene-card">
+        <div class="section-head orbital-scene-head">
+          <div>
+            <h3>Orbital Situation Map</h3>
+            <p class="section-note">A shell-based orbit map with risk-coded markers. It is deliberately restrained so the data reads clearly before the chart noise below.</p>
+          </div>
+          <div class="orbital-scene-legend">
+            <span class="legend-chip low">Low</span>
+            <span class="legend-chip medium">Medium</span>
+            <span class="legend-chip high">High</span>
+          </div>
+        </div>
+        <div id="orbitalMap" class="orbital-map" aria-label="Orbital map with debris markers"></div>
+        <div class="orbital-scene-meta">
+          <div><span>Tracked Objects</span><strong id="orbitalSceneCount">Loading...</strong></div>
+          <div><span>Shells</span><strong id="orbitalShellCount">Loading...</strong></div>
+          <div><span>Alerts</span><strong id="orbitalAlertCount">Loading...</strong></div>
+          <div><span>Mode</span><strong>Physics-gated fusion</strong></div>
+        </div>
+      </article>
+      <article class="card">
+        <h3>Collision Alert Panel</h3>
+        <div id="collisionAlertList" class="stack-list"></div>
+      </article>
+      <article class="card">
+        <h3>Model Stack</h3>
+        <div id="modelStackGrid" class="model-grid"></div>
+      </article>
+      <article class="card">
+        <h3>Deployment Stack</h3>
+        <div id="deploymentStackList" class="stack-list"></div>
+      </article>
+      <article class="card">
+        <h3>Research Edge</h3>
+        <div id="researchEdgeList" class="stack-list"></div>
+      </article>
+      <article class="card card-span-2">
+        <h3>Architecture Timeline</h3>
+        <div id="architectureTimeline" class="timeline-list"></div>
+      </article>
+      <div class="card outputs-intro card-span-2">
         <h2>Analyze</h2>
         <p class="section-note">Charts, calibration, and inspection overlays live here. They stay out of the way until you choose this tab.</p>
       </div>
       <article class="card">
-        <h3>Class Probabilities</h3>
+        <h3>Collision Risk Surface</h3>
         <canvas id="classChart"></canvas>
       </article>
       <article class="card">
-        <h3>Preprocessed Optical</h3>
+        <h3>Orbital Imagery Channel</h3>
         <img id="opticalPreview" class="preview" alt="optical preprocessing" />
       </article>
       <article class="card">
-        <h3>Preprocessed Radar</h3>
+        <h3>Radar / Sensor View</h3>
         <img id="radarPreview" class="preview" alt="radar preprocessing" />
         <small id="radarHint" class="helper-text">Upload radar image or use radar modality to view true radar preprocessing.</small>
       </article>
       <article class="card">
-        <h3>Layer Activation</h3>
+        <h3>Model Attention Lens</h3>
         <img id="activationPreview" class="preview" alt="layer activation" />
         <small id="activationHint" class="helper-text">Select a layer to visualize activation.</small>
       </article>
       <article class="card">
-        <h3>Evidence Heatmap</h3>
+        <h3>Physics Confidence Map</h3>
         <img id="heatmapPreview" class="preview" alt="evidence heatmap" />
       </article>
       <article class="card">
-        <h3>Bounding-Box Overlay</h3>
+        <h3>Conjunction Bounding Overlay</h3>
         <img id="bboxPreview" class="preview" alt="bbox overlay" />
       </article>
       <article class="card card-span-2">
@@ -515,19 +595,19 @@
         <canvas id="rgbCombinedChart" width="400" height="200" style="margin-top: 16px;"></canvas>
       </article>
       <article class="card">
-        <h3>Recommended Dataset Sources</h3>
-        <ul id="datasetSources"></ul>
+        <h3>Data Sources & Catalog</h3>
+        <ul id="datasetSourcesExport"></ul>
       </article>
       <article class="card">
-        <h3>Batch Risk Plot</h3>
+        <h3>Live Risk Timeline</h3>
         <canvas id="batchRiskChart"></canvas>
       </article>
       <article class="card">
-        <h3>Accuracy Leaderboard</h3>
+        <h3>Model Leaderboard</h3>
         <canvas id="accuracyBarChart"></canvas>
       </article>
       <article class="card">
-        <h3>Model Benchmark</h3>
+        <h3>Model Benchmark + Reliability</h3>
         <canvas id="benchmarkChart"></canvas>
         <div id="modelComparisonPanel" class="model-comparison-panel"></div>
         <pre id="benchmarkSummary">Benchmark not loaded.</pre>
@@ -565,8 +645,8 @@
         </div>
       </article>
       <article class="card card-span-2">
-        <h3>How to Read This View</h3>
-        <p class="section-note">Use the class chart for the immediate class split, the RGB panel for signal quality, and the benchmark cards when you need model-level evidence.</p>
+        <h3>Reading the Console</h3>
+        <p class="section-note">Use the risk surface for the immediate threat split, the RGB panel for signal quality, and the benchmark cards when you need model-level evidence rather than a single probability.</p>
       </article>
     </section>
 
@@ -662,6 +742,16 @@
     const radarPreview = document.getElementById('radarPreview');
     const activationPreview = document.getElementById('activationPreview');
     const datasetSources = document.getElementById('datasetSources');
+    const datasetSourcesExport = document.getElementById('datasetSourcesExport');
+    const orbitalMap = document.getElementById('orbitalMap');
+    const collisionAlertList = document.getElementById('collisionAlertList');
+    const modelStackGrid = document.getElementById('modelStackGrid');
+    const deploymentStackList = document.getElementById('deploymentStackList');
+    const researchEdgeList = document.getElementById('researchEdgeList');
+    const architectureTimeline = document.getElementById('architectureTimeline');
+    const orbitalSceneCount = document.getElementById('orbitalSceneCount');
+    const orbitalShellCount = document.getElementById('orbitalShellCount');
+    const orbitalAlertCount = document.getElementById('orbitalAlertCount');
     const rgbViewMode = document.getElementById('rgbViewMode');
     const rgbNormalizeMode = document.getElementById('rgbNormalizeMode');
     const rgbChannelFocus = document.getElementById('rgbChannelFocus');
@@ -679,6 +769,7 @@
     let lastBatchPayload = null;
     let lastBenchmarkPayload = null;
     let lastInferencePayload = null;
+    let lastOrbitalBrief = null;
     let isRunningSelected = false;
     let isRunningForm = false;
     let activeWorkflowPanel = localStorage.getItem('usdd.workflowTab') || 'ingest';
@@ -689,6 +780,7 @@
       requestAnimationFrame(() => {
         [chart, batchChart, benchmarkChart, accuracyChart, calibrationChart, redHistChart, greenHistChart, blueHistChart, rgbCombinedChart]
           .forEach((item) => item?.resize?.());
+        if (lastOrbitalBrief && activeWorkflowPanel === 'analyze') renderOrbitalMap(lastOrbitalBrief.visualization || {});
       });
     };
 
@@ -715,6 +807,9 @@
         if (lastBatchPayload) {
           drawBatchRiskChart(lastBatchPayload.samples || []);
           drawBatchGrid(lastBatchPayload.samples || []);
+        }
+        if (lastOrbitalBrief) {
+          renderOrbitalBrief(lastOrbitalBrief);
         }
         resizeAnalysisCharts();
       }
@@ -746,6 +841,7 @@
     };
 
     loadPreferredSettings();
+    loadOrbitalBrief();
     [document.getElementById('imageSize'), document.getElementById('opticalBand'), document.getElementById('normalizeMode'), operatorProfile, batchOperatorProfile].forEach((el) => {
       if (!el) return;
       el.addEventListener('change', () => {
@@ -753,6 +849,10 @@
         if (el === batchOperatorProfile && operatorProfile) operatorProfile.value = batchOperatorProfile.value;
         savePreferredSettings();
       });
+    });
+
+    window.addEventListener('resize', () => {
+      resizeAnalysisCharts();
     });
 
     const refreshPlatformStatus = async () => {
@@ -975,10 +1075,134 @@
       const res = await fetch('/options');
       const payload = await res.json();
       if (!payload.dataset_sources) return;
-      datasetSources.innerHTML = payload.dataset_sources
+      const sourceMarkup = payload.dataset_sources
         .map((d) => `<li><a href="${d.url}" target="_blank" rel="noreferrer">${d.name}</a></li>`)
         .join('');
+      datasetSources.innerHTML = sourceMarkup;
+      if (datasetSourcesExport) datasetSourcesExport.innerHTML = sourceMarkup;
     };
+
+    const renderTextStack = (container, items, emptyText) => {
+      if (!container) return;
+      if (!items || !items.length) {
+        container.innerHTML = `<div class="gallery-empty">${emptyText}</div>`;
+        return;
+      }
+
+      container.innerHTML = items.map((item) => {
+        if (typeof item === 'string') {
+          return `<div class="stack-item">${item}</div>`;
+        }
+        if (item.name && item.use) {
+          return `
+            <article class="model-pill">
+              <strong>${item.name}</strong>
+              <span>${item.use}</span>
+              <p>${item.why}</p>
+              <small>${item.tradeoff}</small>
+            </article>
+          `;
+        }
+        if (item.step && item.title) {
+          return `
+            <article class="timeline-item">
+              <span>${item.step}</span>
+              <strong>${item.title}</strong>
+              <p>${item.detail}</p>
+            </article>
+          `;
+        }
+        if (item.title && item.body) {
+          return `
+            <article class="stack-item">
+              <strong>${item.title}</strong>
+              <p>${item.body}</p>
+            </article>
+          `;
+        }
+        return `<div class="stack-item">${JSON.stringify(item)}</div>`;
+      }).join('');
+    };
+
+    const shellRadiusMap = { LEO: 25, MEO: 41, GEO: 56 };
+
+    const renderOrbitalMap = (brief) => {
+      if (!orbitalMap) return;
+
+      const shellMarkup = (brief?.shells || [])
+        .map((shell) => `<span class="orbit-shell shell-${shell.name.toLowerCase()}" style="--shell-color:${shell.color}"></span>`)
+        .join('');
+
+      const markerMarkup = (brief?.scene || [])
+        .map((entry, index) => {
+          const baseAngle = (entry.orbit_phase || (index / Math.max(1, brief.scene.length))) * Math.PI * 2;
+          const angle = baseAngle + index * 0.36;
+          const radius = shellRadiusMap[entry.shell] || 25;
+          const x = 50 + Math.cos(angle) * radius;
+          const y = 50 + Math.sin(angle) * radius * 0.62;
+          return `
+            <button
+              type="button"
+              class="map-marker ${entry.risk_band.toLowerCase()}"
+              style="left:${x}%; top:${y}%;"
+              aria-label="${entry.name} risk ${entry.risk_band}"
+            >
+              <span class="marker-dot"></span>
+              <strong>${entry.name}</strong>
+              <small>${entry.shell} · ${(entry.risk_score * 100).toFixed(0)}%</small>
+            </button>
+          `;
+        })
+        .join('');
+
+      orbitalMap.innerHTML = `
+        <div class="map-grid"></div>
+        ${shellMarkup}
+        <div class="map-earth">
+          <span class="earth-label">Earth</span>
+        </div>
+        ${markerMarkup}
+      `;
+    };
+
+    const renderOrbitalBrief = (brief) => {
+      if (!brief) return;
+      lastOrbitalBrief = brief;
+      renderTextStack(architectureTimeline, brief.architecture || [], 'Architecture brief unavailable.');
+      renderTextStack(modelStackGrid, brief.model_stack || [], 'Model stack unavailable.');
+      renderTextStack(deploymentStackList, Object.entries(brief.deployment || {}).map(([title, body]) => ({ title, body: Array.isArray(body) ? body.join(', ') : body })), 'Deployment stack unavailable.');
+      renderTextStack(researchEdgeList, [
+        { title: 'Unique contribution', body: brief.research?.unique_contribution || 'Unavailable' },
+        { title: 'Paper titles', body: (brief.research?.paper_titles || []).join(' • ') || 'Unavailable' },
+        { title: 'Evaluation metrics', body: (brief.research?.metrics || []).join(', ') || 'Unavailable' },
+        { title: 'Comparison', body: (brief.research?.comparison || []).join(' ' ) || 'Unavailable' },
+      ], 'Research edge unavailable.');
+      renderTextStack(collisionAlertList, (brief.visualization?.alerts || []).map((alert) => ({
+        title: `${alert.object} (${alert.risk_band})`,
+        body: `NORAD ${alert.norad_cat_id} · Risk ${(alert.risk_score * 100).toFixed(1)}% · ${alert.recommended_action}`,
+      })), 'No collision alerts right now.');
+
+      if (orbitalSceneCount) orbitalSceneCount.textContent = `${(brief.visualization?.scene || []).length} objects`;
+      if (orbitalShellCount) orbitalShellCount.textContent = `${(brief.visualization?.shells || []).length} shells`;
+      if (orbitalAlertCount) orbitalAlertCount.textContent = `${(brief.visualization?.alerts || []).length} alerts`;
+
+      renderOrbitalMap(brief.visualization || {});
+    };
+
+    async function loadOrbitalBrief() {
+      try {
+        const res = await fetch('/orbital_brief');
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'orbital brief unavailable');
+        renderOrbitalBrief(payload);
+      } catch (error) {
+        renderTextStack(collisionAlertList, [], 'Orbital brief unavailable.');
+        renderTextStack(modelStackGrid, [], 'Model brief unavailable.');
+        renderTextStack(deploymentStackList, [], 'Deployment brief unavailable.');
+        renderTextStack(researchEdgeList, [], 'Research brief unavailable.');
+        renderTextStack(architectureTimeline, [], 'Architecture brief unavailable.');
+      }
+    }
 
     const drawBatchRiskChart = (samples) => {
       if (!samples || !samples.length) {
@@ -1122,12 +1346,12 @@
 
       const modelNames = payload.models.map((m) => m.model).join(', ');
       const steps = [
-        '1) Data ingestion: local optical/radar images plus NASA ODPO public files are indexed and previewed.',
-        '2) Preprocessing: resizing, band selection, normalization, and camera-threshold suppression reduce noise.',
-        '3) Feature extraction: deep backbones learn debris morphology and texture signatures from images.',
-        '4) Multi-task prediction: the model outputs debris detect probability, class probabilities, collision risk, and orbit vector.',
-        '5) Visual evidence: layer activation maps, pseudo-heatmaps, and bounding-box overlays expose model attention areas.',
-        `6) Benchmarking: ${modelNames} are compared on accuracy, precision, recall, F1, and test loss to select the best scientific model.`,
+        '1) Data ingestion: TLE feeds, optical imagery, radar frames, and catalog metadata are normalized into one mission schema.',
+        '2) Feature engineering: semi-major axis, altitude, shell distance, cyclic angles, drag proxies, and relative geometry cues are computed.',
+        '3) Physics gate: objects are short-listed by orbital shell proximity and relative motion before heavy inference runs.',
+        '4) Multi-modal AI: LSTM / GRU forecast trajectories, Transformers capture long-range dependencies, and XGBoost keeps a fast baseline honest.',
+        '5) Collision fusion: relative velocity, orbital context, and calibrated probabilities are fused into low / medium / high risk bands.',
+        `6) Benchmarking: ${modelNames} are compared on accuracy, precision, recall, F1, calibration, and decision stability before promotion.`,
       ];
       algoSteps.innerHTML = steps.map((s) => `<li>${s}</li>`).join('');
     };
