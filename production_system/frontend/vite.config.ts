@@ -5,5 +5,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    proxy: {
+      "/legacy-api": {
+        target: "http://127.0.0.1:7860",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/legacy-api/, ""),
+      },
+    },
   },
 });

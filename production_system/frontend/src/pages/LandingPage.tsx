@@ -1,12 +1,55 @@
 import { motion } from "framer-motion";
 import { type ReactElement, useState } from "react";
+import {
+  legacyDatasetInventory,
+  legacyLoadAllPublicData,
+  legacyPredict,
+  legacyPredictDataset,
+  legacyPredictFile,
+  legacyPreviewNasaSolarflux,
+} from "../services/api";
 
 interface LandingPageProps {
   onNavigate?: () => void;
 }
 
 export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
+  type ExplorerItem = {
+    path: string;
+    file_name?: string;
+    modality?: string;
+  };
+
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const [imageSize, setImageSize] = useState<number>(64);
+  const [opticalBand, setOpticalBand] = useState<string>("rgb");
+  const [normalizeMode, setNormalizeMode] = useState<string>("unit");
+  const [physicsVector, setPhysicsVector] = useState<string>(
+    "0.12,0.05,0.22,0.08,0.9,1.1,0.7,0.2,0.4,0.6,1.5,1.9,2.1,0.3,0.44,0.77"
+  );
+  const [opticalFile, setOpticalFile] = useState<File | null>(null);
+  const [radarFile, setRadarFile] = useState<File | null>(null);
+  const [inferBusy, setInferBusy] = useState<boolean>(false);
+  const [inferStatus, setInferStatus] = useState<string>("Ready for live inference.");
+  const [inferResult, setInferResult] = useState<any>(null);
+
+  const [nasaBusy, setNasaBusy] = useState<boolean>(false);
+  const [nasaStatus, setNasaStatus] = useState<string>("NASA loader not started.");
+  const [solarFluxRows, setSolarFluxRows] = useState<number>(0);
+
+  const [datasetDir, setDatasetDir] = useState<string>("c:/Users/PREM DIWAN/Desktop/ml/images");
+  const [batchModality, setBatchModality] = useState<string>("optical");
+  const [maxSamples, setMaxSamples] = useState<number>(12);
+  const [batchBusy, setBatchBusy] = useState<boolean>(false);
+  const [batchStatus, setBatchStatus] = useState<string>("Waiting for dataset run...");
+  const [batchResult, setBatchResult] = useState<any>(null);
+
+  const [explorerBusy, setExplorerBusy] = useState<boolean>(false);
+  const [explorerStatus, setExplorerStatus] = useState<string>("Scan the folder to start exploring images.");
+  const [explorerItems, setExplorerItems] = useState<ExplorerItem[]>([]);
+  const [selectedPath, setSelectedPath] = useState<string>("");
+  const [selectedBusy, setSelectedBusy] = useState<boolean>(false);
+  const [selectedResult, setSelectedResult] = useState<any>(null);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -110,6 +153,121 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       description: "Streaming updates are pushed into alerts, dashboards, and exportable research packs without blocking the operator flow.",
     },
   ];
+
+  const runLivePrediction = async () => {
+    setInferBusy(true);
+    setInferStatus("Running prediction...");
+    try {
+      const payload = await legacyPredict({
+        opticalFile,
+        radarFile,
+        physics: physicsVector,
+        imageSize,
+        opticalBand,
+        normalizeMode,
+      });
+      setInferResult(payload);
+      const detectPct = Number(payload.detect_probability ?? 0) * 100;
+      const collisionPct = Number(payload.collision_probability ?? 0) * 100;
+      setInferStatus(
+        `Prediction complete. Detect ${detectPct.toFixed(2)}% | Collision ${collisionPct.toFixed(2)}% | Class ${payload.predicted_class ?? "n/a"}`
+      );
+    } catch (error) {
+      setInferStatus(`Prediction failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setInferBusy(false);
+    }
+  };
+
+  const loadNasaData = async () => {
+    setNasaBusy(true);
+    setNasaStatus("Loading NASA public data...");
+    try {
+      const result = await legacyLoadAllPublicData();
+      const solar = await legacyPreviewNasaSolarflux();
+      const rows = Number(solar?.summary?.rows ?? 0);
+      setSolarFluxRows(rows);
+      setNasaStatus(
+        `Loaded. Gallery count: ${result.gallery_count ?? 0}. Solar flux rows: ${rows}.`
+      );
+    } catch (error) {
+      setNasaStatus(`NASA load failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setNasaBusy(false);
+    }
+  };
+
+  const runDatasetBatch = async () => {
+    setBatchBusy(true);
+    setBatchStatus("Running dataset batch...");
+    try {
+      const result = await legacyPredictDataset({
+        datasetDir,
+        modality: batchModality,
+        maxSamples,
+        imageSize,
+        opticalBand,
+        normalizeMode,
+      });
+      setBatchResult(result);
+      setBatchStatus(
+        `Batch complete. Processed ${result.processed ?? 0}/${result.num_images ?? 0} images. Avg detect ${(Number(result.avg_detect_probability ?? 0) * 100).toFixed(2)}%.`
+      );
+    } catch (error) {
+      setBatchStatus(`Batch failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const scanExplorer = async () => {
+    setExplorerBusy(true);
+    setExplorerStatus("Scanning folder...");
+    try {
+      const result = await legacyDatasetInventory(datasetDir, 100);
+      const items: ExplorerItem[] = result.items ?? [];
+      setExplorerItems(items);
+      const firstPath = items[0]?.path ?? "";
+      setSelectedPath(firstPath);
+      setExplorerStatus(`Found ${result.count ?? items.length} files.`);
+    } catch (error) {
+      setExplorerStatus(`Scan failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      setExplorerItems([]);
+      setSelectedPath("");
+    } finally {
+      setExplorerBusy(false);
+    }
+  };
+
+  const runSelectedImage = async () => {
+    if (!selectedPath) {
+      setExplorerStatus("Select or scan a file first.");
+      return;
+    }
+
+    setSelectedBusy(true);
+    setExplorerStatus("Running selected image...");
+    try {
+      const result = await legacyPredictFile({
+        filePath: selectedPath,
+        modality: batchModality,
+        imageSize,
+        opticalBand,
+        normalizeMode,
+      });
+      setSelectedResult(result);
+      const detectPct = Number(result.detect_probability ?? 0) * 100;
+      const collisionPct = Number(result.collision_probability ?? 0) * 100;
+      setExplorerStatus(
+        `Selected inference complete. Detect ${detectPct.toFixed(2)}%, Collision ${collisionPct.toFixed(2)}%.`
+      );
+    } catch (error) {
+      setExplorerStatus(`Selected image failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      setSelectedResult(null);
+    } finally {
+      setSelectedBusy(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 scroll-smooth">
@@ -557,21 +715,55 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               >
                 <h3 className="text-xl font-bold text-white mb-6">Inference Controls</h3>
                 <div className="space-y-6">
-                  {[
-                    { label: "Image Size", value: "64" },
-                    { label: "Optical Bands", value: "RGB" },
-                    { label: "Normalization", value: "Unit [0,1]" },
-                  ].map((control, idx) => (
-                    <div key={idx}>
-                      <label className="text-sm font-semibold text-slate-300 mb-2 block">{control.label}</label>
-                      <div className="rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200">
-                        {control.value}
-                      </div>
-                    </div>
-                  ))}
-                  <button className="w-full mt-6 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg shadow-green-500/30 transition-all">
-                    Run Prediction
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Image Size</label>
+                    <input
+                      type="number"
+                      min={32}
+                      max={512}
+                      value={imageSize}
+                      onChange={(event) => setImageSize(Number(event.target.value || 64))}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Optical Bands</label>
+                    <select
+                      value={opticalBand}
+                      onChange={(event) => setOpticalBand(event.target.value)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    >
+                      <option value="rgb">RGB</option>
+                      <option value="gray">Grayscale</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Normalization</label>
+                    <select
+                      value={normalizeMode}
+                      onChange={(event) => setNormalizeMode(event.target.value)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    >
+                      <option value="unit">Unit [0,1]</option>
+                      <option value="zscore">Z-Score</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => void runLivePrediction()}
+                    disabled={inferBusy}
+                    className="w-full mt-6 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg shadow-green-500/30 transition-all disabled:opacity-60"
+                  >
+                    {inferBusy ? "Running..." : "Run Prediction"}
                   </button>
+                  <p className="text-sm text-slate-300">{inferStatus}</p>
+                  {inferResult && (
+                    <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 p-4 text-sm text-slate-200 space-y-1">
+                      <p>Detect Probability: {(Number(inferResult.detect_probability ?? 0) * 100).toFixed(2)}%</p>
+                      <p>Collision Probability: {(Number(inferResult.collision_probability ?? 0) * 100).toFixed(2)}%</p>
+                      <p>Predicted Class: {String(inferResult.predicted_class ?? "n/a")}</p>
+                      <p>Inference Source: {String(inferResult.inference_source ?? "n/a")}</p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
 
@@ -583,20 +775,41 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               >
                 <h3 className="text-xl font-bold text-white mb-6">Input Data</h3>
                 <div className="space-y-6">
-                  {[
-                    { label: "Optical Image", icon: "🖼️" },
-                    { label: "Radar Image", icon: "📡" },
-                    { label: "Physics Vector (16 values)", icon: "📊" },
-                  ].map((input, idx) => (
-                    <div key={idx}>
-                      <label className="text-sm font-semibold text-slate-300 mb-2 block flex items-center gap-2">
-                        <span>{input.icon}</span> {input.label}
-                      </label>
-                      <div className="rounded-lg bg-slate-700/30 border-2 border-dashed border-slate-600/50 px-4 py-6 text-center text-slate-400 hover:border-slate-500/70 transition-all cursor-pointer">
-                        No file chosen
-                      </div>
-                    </div>
-                  ))}
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                      <span>🖼️</span> Optical Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setOpticalFile(event.target.files?.[0] ?? null)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/50 px-4 py-3 text-slate-200"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">{opticalFile?.name ?? "No file chosen"}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                      <span>📡</span> Radar Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setRadarFile(event.target.files?.[0] ?? null)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/50 px-4 py-3 text-slate-200"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">{radarFile?.name ?? "No file chosen"}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                      <span>📊</span> Physics Vector (16 values)
+                    </label>
+                    <textarea
+                      value={physicsVector}
+                      onChange={(event) => setPhysicsVector(event.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/50 px-4 py-3 text-slate-200"
+                    />
+                  </div>
                 </div>
               </motion.div>
             </div>
@@ -626,6 +839,32 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               Ingest public orbital debris sources and run batch inference on entire datasets with one click.
             </p>
 
+            <div className="grid md:grid-cols-3 gap-4 mb-8">
+              <input
+                value={datasetDir}
+                onChange={(event) => setDatasetDir(event.target.value)}
+                placeholder="Dataset folder path"
+                className="rounded-lg bg-slate-800/70 border border-slate-700/50 px-4 py-3 text-slate-200"
+              />
+              <select
+                value={batchModality}
+                onChange={(event) => setBatchModality(event.target.value)}
+                className="rounded-lg bg-slate-800/70 border border-slate-700/50 px-4 py-3 text-slate-200"
+              >
+                <option value="optical">optical</option>
+                <option value="radar">radar</option>
+                <option value="all">all</option>
+              </select>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={maxSamples}
+                onChange={(event) => setMaxSamples(Number(event.target.value || 12))}
+                className="rounded-lg bg-slate-800/70 border border-slate-700/50 px-4 py-3 text-slate-200"
+              />
+            </div>
+
             <div className="grid md:grid-cols-3 gap-8">
               {/* NASA Loader */}
               <motion.div
@@ -639,9 +878,15 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <p className="text-sm text-slate-300 mb-6">
                   Ingest public orbital debris sources so the rest of the workflow has a concrete dataset.
                 </p>
-                <button className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all">
-                  Load Everything
+                <button
+                  onClick={() => void loadNasaData()}
+                  disabled={nasaBusy}
+                  className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all disabled:opacity-60"
+                >
+                  {nasaBusy ? "Loading..." : "Load Everything"}
                 </button>
+                <p className="text-xs text-slate-300 mt-3">{nasaStatus}</p>
+                {solarFluxRows > 0 && <p className="text-xs text-cyan-300">Solar Flux Rows: {solarFluxRows}</p>}
               </motion.div>
 
               {/* Batch Inference */}
@@ -657,9 +902,19 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <p className="text-sm text-slate-300 mb-6">
                   Run folder-level inference when ready. Default controls keep the primary decision flow simple.
                 </p>
-                <button className="w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all">
-                  Run Batch
+                <button
+                  onClick={() => void runDatasetBatch()}
+                  disabled={batchBusy}
+                  className="w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all disabled:opacity-60"
+                >
+                  {batchBusy ? "Running..." : "Run Batch"}
                 </button>
+                <p className="text-xs text-slate-300 mt-3">{batchStatus}</p>
+                {batchResult && (
+                  <p className="text-xs text-cyan-300 mt-1">
+                    Avg Collision: {(Number(batchResult.avg_collision_probability ?? 0) * 100).toFixed(2)}%
+                  </p>
+                )}
               </motion.div>
 
               {/* Dataset Explorer */}
@@ -675,9 +930,43 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <p className="text-sm text-slate-300 mb-6">
                   Inspect one file end-to-end instead of launching a whole batch for quick validation.
                 </p>
-                <button className="w-full px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition-all">
-                  Explore Files
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => void scanExplorer()}
+                    disabled={explorerBusy}
+                    className="w-full px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition-all disabled:opacity-60"
+                  >
+                    {explorerBusy ? "Scanning..." : "Explore Files"}
+                  </button>
+                  <button
+                    onClick={() => void runSelectedImage()}
+                    disabled={selectedBusy || !selectedPath}
+                    className="w-full px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all disabled:opacity-60"
+                  >
+                    {selectedBusy ? "Running..." : "Run Selected Image"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300 mt-3">{explorerStatus}</p>
+                {explorerItems.length > 0 && (
+                  <select
+                    value={selectedPath}
+                    onChange={(event) => setSelectedPath(event.target.value)}
+                    className="mt-3 w-full rounded-lg bg-slate-800/70 border border-slate-700/50 px-3 py-2 text-slate-200 text-xs"
+                  >
+                    {explorerItems.map((item) => (
+                      <option key={item.path} value={item.path}>
+                        {item.file_name ?? item.path}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {selectedResult && (
+                  <div className="mt-3 rounded-lg bg-slate-900/60 border border-slate-700/50 p-3 text-xs text-slate-200 space-y-1">
+                    <p>Detect: {(Number(selectedResult.detect_probability ?? 0) * 100).toFixed(2)}%</p>
+                    <p>Collision: {(Number(selectedResult.collision_probability ?? 0) * 100).toFixed(2)}%</p>
+                    <p>Class: {String(selectedResult.predicted_class ?? "n/a")}</p>
+                  </div>
+                )}
               </motion.div>
             </div>
           </div>

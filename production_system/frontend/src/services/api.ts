@@ -1,4 +1,19 @@
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+export const LEGACY_API_BASE = import.meta.env.VITE_LEGACY_API_BASE ?? "/legacy-api";
+const LEGACY_API_KEY = import.meta.env.VITE_LEGACY_API_KEY ?? "";
+
+function legacyHeaders(): Record<string, string> {
+  return LEGACY_API_KEY ? { "X-API-Key": LEGACY_API_KEY } : {};
+}
+
+async function parseLegacyResponse(res: Response): Promise<any> {
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = payload?.error ?? `Legacy API request failed: ${res.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
 
 export async function fetchHealth(): Promise<{ status: string; service: string }> {
   const res = await fetch(`${API_BASE}/healthz`);
@@ -48,4 +63,104 @@ export async function login(username: string, password: string): Promise<string>
   if (!res.ok) throw new Error("Login failed");
   const payload = await res.json();
   return payload.access_token;
+}
+
+export async function legacyPredict(params: {
+  opticalFile?: File | null;
+  radarFile?: File | null;
+  physics: string;
+  imageSize: number;
+  opticalBand: string;
+  normalizeMode: string;
+}): Promise<any> {
+  const form = new FormData();
+  if (params.opticalFile) form.append("optical", params.opticalFile);
+  if (params.radarFile) form.append("radar", params.radarFile);
+  form.append("physics", params.physics);
+  form.append("image_size", String(params.imageSize));
+  form.append("optical_band", params.opticalBand);
+  form.append("normalize_mode", params.normalizeMode);
+
+  const res = await fetch(`${LEGACY_API_BASE}/predict`, {
+    method: "POST",
+    headers: legacyHeaders(),
+    body: form,
+  });
+
+  return parseLegacyResponse(res);
+}
+
+export async function legacyLoadAllPublicData(): Promise<any> {
+  const res = await fetch(`${LEGACY_API_BASE}/load_all_public_data`, {
+    method: "POST",
+    headers: legacyHeaders(),
+  });
+  return parseLegacyResponse(res);
+}
+
+export async function legacyPreviewNasaSolarflux(): Promise<any> {
+  const res = await fetch(`${LEGACY_API_BASE}/preview_nasa_solarflux`, {
+    headers: legacyHeaders(),
+  });
+  return parseLegacyResponse(res);
+}
+
+export async function legacyPredictDataset(params: {
+  datasetDir: string;
+  modality: string;
+  maxSamples: number;
+  imageSize: number;
+  opticalBand: string;
+  normalizeMode: string;
+}): Promise<any> {
+  const form = new FormData();
+  form.append("dataset_dir", params.datasetDir);
+  form.append("modality", params.modality);
+  form.append("max_samples", String(params.maxSamples));
+  form.append("image_size", String(params.imageSize));
+  form.append("optical_band", params.opticalBand);
+  form.append("normalize_mode", params.normalizeMode);
+
+  const res = await fetch(`${LEGACY_API_BASE}/predict_dataset`, {
+    method: "POST",
+    headers: legacyHeaders(),
+    body: form,
+  });
+
+  return parseLegacyResponse(res);
+}
+
+export async function legacyDatasetInventory(folder: string, limit = 120): Promise<any> {
+  const url = new URL(`${LEGACY_API_BASE}/dataset_inventory`, window.location.origin);
+  url.searchParams.set("folder", folder);
+  url.searchParams.set("limit", String(limit));
+
+  const res = await fetch(url.toString(), {
+    headers: legacyHeaders(),
+  });
+
+  return parseLegacyResponse(res);
+}
+
+export async function legacyPredictFile(params: {
+  filePath: string;
+  modality: string;
+  imageSize: number;
+  opticalBand: string;
+  normalizeMode: string;
+}): Promise<any> {
+  const form = new FormData();
+  form.append("file_path", params.filePath);
+  form.append("modality", params.modality);
+  form.append("image_size", String(params.imageSize));
+  form.append("optical_band", params.opticalBand);
+  form.append("normalize_mode", params.normalizeMode);
+
+  const res = await fetch(`${LEGACY_API_BASE}/predict_file`, {
+    method: "POST",
+    headers: legacyHeaders(),
+    body: form,
+  });
+
+  return parseLegacyResponse(res);
 }
