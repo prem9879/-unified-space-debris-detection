@@ -497,6 +497,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         apiKey: legacyApiKey,
       });
       setBatchResult(result);
+      if (Array.isArray(result?.samples) && result.samples.length > 0) {
+        setInferResult(result.samples[0]);
+      }
       setReadiness((prev) => ({
         ...prev,
         predictDataset: {
@@ -645,6 +648,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         layerName: selectedLayer || undefined,
         apiKey: legacyApiKey,
       });
+      setInferResult(result);
       setSelectedResult(result);
       const detectPct = Number(result.detect_probability ?? 0) * 100;
       const collisionPct = Number(result.collision_probability ?? 0) * 100;
@@ -715,6 +719,18 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   };
 
   const batchSamples = Array.isArray(batchResult?.samples) ? batchResult.samples : [];
+  const insightResult = inferResult ?? selectedResult ?? batchSamples[0] ?? null;
+  const insightDebris = Number(insightResult?.detect_probability ?? 0);
+  const insightCollision = Number(insightResult?.collision_probability ?? 0);
+  const insightTopProb = Number(
+    insightResult?.class_probabilities?.[insightResult?.predicted_class] ??
+    insightResult?.decision_basis?.top_class_probability ??
+    insightDebris
+  );
+  const insightUncertainty = Math.max(0, Math.min(1, 1 - insightTopProb));
+  const insightEvidence = Number(
+    insightResult?.decision_basis?.hot_pixel_ratio ?? insightResult?.operational_summary?.signals?.hot_pixel_ratio ?? 0
+  );
   const riskLabels = batchSamples.slice(0, 20).map((item: any) => item.file_name ?? "sample");
   const riskValues = batchSamples.slice(0, 20).map((item: any) => Number(item.collision_probability ?? 0) * 100);
   const detectValues = batchSamples.slice(0, 20).map((item: any) => Number(item.detect_probability ?? 0) * 100);
@@ -1922,10 +1938,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
               <p className="text-sm uppercase tracking-widest text-slate-400 mb-4">Research Insight Panel</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Debris Confidence</p><p className="text-xl font-bold text-green-400">{inferResult ? `${(Number(inferResult.detect_probability ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
-                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Collision Risk</p><p className="text-xl font-bold text-red-400">{inferResult ? `${(Number(inferResult.collision_probability ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
-                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Prediction Uncertainty</p><p className="text-xl font-bold text-yellow-300">{inferResult ? `${(100 - Number(inferResult.class_probabilities?.[inferResult.predicted_class] ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
-                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Evidence Intensity</p><p className="text-xl font-bold text-cyan-300">{inferResult ? `${((inferResult.decision_basis?.hot_pixel_ratio ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Debris Confidence</p><p className="text-xl font-bold text-green-400">{insightResult ? `${(insightDebris * 100).toFixed(1)}%` : "Run any inference"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Collision Risk</p><p className="text-xl font-bold text-red-400">{insightResult ? `${(insightCollision * 100).toFixed(1)}%` : "Run any inference"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Prediction Uncertainty</p><p className="text-xl font-bold text-yellow-300">{insightResult ? `${(insightUncertainty * 100).toFixed(1)}%` : "Run any inference"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Evidence Intensity</p><p className="text-xl font-bold text-cyan-300">{insightResult ? `${(insightEvidence * 100).toFixed(1)}%` : "Run any inference"}</p></div>
               </div>
               <p className="text-sm text-slate-300 mt-4">Use the risk surface for immediate threat split, the visual grid for evidence checks, and reliability for confidence calibration review.</p>
             </div>
