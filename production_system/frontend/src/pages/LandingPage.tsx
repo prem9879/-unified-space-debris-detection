@@ -65,7 +65,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [nasaStatus, setNasaStatus] = useState<string>("NASA loader not started.");
   const [solarFluxRows, setSolarFluxRows] = useState<number>(0);
 
-  const [datasetDir, setDatasetDir] = useState<string>("c:/Users/PREM DIWAN/Desktop/ml/images");
+  const [datasetDir, setDatasetDir] = useState<string>("c:/Users/PREM DIWAN/Desktop/ml/images/debris");
   const [batchModality, setBatchModality] = useState<string>("optical");
   const [maxSamples, setMaxSamples] = useState<number>(12);
   const [batchBusy, setBatchBusy] = useState<boolean>(false);
@@ -328,71 +328,70 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
 
   const runStartupChecks = async () => {
     setChecksBusy(true);
-    setReadiness((prev) => {
-      const next: Record<string, ReadinessItem> = { ...prev };
-      Object.keys(next).forEach((key) => {
-        next[key] = { ...next[key], state: "pending", detail: "Checking..." };
-      });
-      return next;
-    });
+    const updates: Partial<Record<string, ReadinessItem>> = {};
 
+    let coreReady = false;
     try {
-      const inventory = await legacyDatasetInventory(datasetDir, 1, legacyApiKey);
-      setReadiness((prev) => ({
-        ...prev,
-        datasetInventory: {
-          ...prev.datasetInventory,
-          state: "ready",
-          detail: `${inventory.count ?? 0} files discoverable`,
-        },
-        predictFile: {
-          ...prev.predictFile,
-          state: "ready",
-          detail: "Explorer file scan and single-file path available",
-        },
-      }));
+      const ready = await legacyReadyz(legacyApiKey);
+      coreReady = ready?.status === "ready";
+      updates.readyz = {
+        label: "Core Service",
+        state: coreReady ? "ready" : "warning",
+        detail: coreReady ? "Healthy" : "Unexpected ready status",
+      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Dataset inventory failed";
-      setReadiness((prev) => ({
-        ...prev,
-        datasetInventory: {
-          ...prev.datasetInventory,
-          state: "down",
-          detail: message,
-        },
-        predictFile: {
-          ...prev.predictFile,
-          state: "down",
-          detail: "Explorer path blocked by inventory failure",
-        },
-      }));
+      updates.readyz = {
+        label: "Core Service",
+        state: "down",
+        detail: error instanceof Error ? error.message : "Unavailable",
+      };
     }
 
-    setReadiness((prev) => ({
-      ...prev,
-      predict: {
-        ...prev.predict,
-        state: prev.readyz.state === "ready" ? "ready" : "warning",
-        detail: prev.readyz.state === "ready"
-          ? "Ready once an optical/radar image is provided"
-          : "Core service not ready",
-      },
-      predictDataset: {
-        ...prev.predictDataset,
-        state: prev.datasetInventory.state === "ready" && prev.readyz.state === "ready" ? "ready" : "warning",
-        detail: prev.datasetInventory.state === "ready"
-          ? "Dataset folder can be processed"
-          : "Provide a valid dataset folder path",
-      },
-      nasa: {
-        ...prev.nasa,
-        state: prev.readyz.state === "ready" ? "ready" : "warning",
-        detail: prev.readyz.state === "ready"
-          ? "Loader endpoint reachable"
-          : "Core service unavailable",
-      },
-    }));
+    let inventoryReady = false;
+    try {
+      const inventory = await legacyDatasetInventory(datasetDir, 1, legacyApiKey);
+      inventoryReady = true;
+      updates.datasetInventory = {
+        label: "Dataset Inventory",
+        state: "ready",
+        detail: `${inventory.count ?? 0} files discoverable`,
+      };
+    } catch (error) {
+      updates.datasetInventory = {
+        label: "Dataset Inventory",
+        state: "warning",
+        detail: error instanceof Error ? error.message : "Provide a valid folder path",
+      };
+    }
 
+    updates.predict = {
+      label: "Live Inference Path",
+      state: coreReady ? "ready" : "warning",
+      detail: coreReady ? "Ready to run live inference" : "Core service not ready",
+    };
+    updates.predictDataset = {
+      label: "Batch Inference Path",
+      state: coreReady && inventoryReady ? "ready" : "warning",
+      detail: coreReady && inventoryReady ? "Dataset folder can be processed" : "Check core service and dataset folder",
+    };
+    updates.predictFile = {
+      label: "Explorer Inference Path",
+      state: coreReady ? "ready" : "warning",
+      detail: coreReady ? "Run selected image is available" : "Core service not ready",
+    };
+    updates.nasa = {
+      label: "NASA Loader Path",
+      state: coreReady ? "ready" : "warning",
+      detail: coreReady ? "Loader endpoint reachable" : "Core service not ready",
+    };
+
+    setReadiness((prev) => {
+      const merged: Record<string, ReadinessItem> = { ...prev };
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value) merged[key] = value;
+      });
+      return merged;
+    });
     setChecksBusy(false);
   };
 
@@ -408,6 +407,14 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   useEffect(() => {
     localStorage.setItem("legacyApiKey", legacyApiKey);
   }, [legacyApiKey]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void runStartupChecks();
+    }, 450);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasetDir, legacyApiKey]);
 
   const runLivePrediction = async () => {
     setInferBusy(true);
@@ -467,6 +474,14 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         apiKey: legacyApiKey,
       });
       setBatchResult(result);
+      setReadiness((prev) => ({
+        ...prev,
+        predictDataset: {
+          ...prev.predictDataset,
+          state: "ready",
+          detail: `Processed ${result.processed ?? 0}/${result.num_images ?? 0}`,
+        },
+      }));
       setBatchStatus(
         `Batch complete. Processed ${result.processed ?? 0}/${result.num_images ?? 0} images. Avg detect ${(Number(result.avg_detect_probability ?? 0) * 100).toFixed(2)}%.`
       );
@@ -486,6 +501,14 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setExplorerItems(items);
       const firstPath = items[0]?.path ?? "";
       setSelectedPath(firstPath);
+      setReadiness((prev) => ({
+        ...prev,
+        datasetInventory: {
+          ...prev.datasetInventory,
+          state: "ready",
+          detail: `${items.length} items loaded in explorer`,
+        },
+      }));
       setExplorerStatus(`Found ${result.count ?? items.length} files.`);
     } catch (error) {
       setExplorerStatus(`Scan failed: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -1287,20 +1310,20 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   </div>
                   <button
                     onClick={() => void runLivePrediction()}
-                    disabled={inferBusy || readiness.predict.state !== "ready"}
+                    disabled={inferBusy || readiness.readyz.state === "down"}
                     className="w-full mt-6 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg shadow-green-500/30 transition-all disabled:opacity-60"
                   >
                     {inferBusy ? "Running..." : "Run Prediction"}
                   </button>
                   <button
                     onClick={() => void runDemoVisualFill()}
-                    disabled={selectedBusy || readiness.predictFile.state !== "ready"}
+                    disabled={selectedBusy || readiness.readyz.state === "down"}
                     className="w-full px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold transition-all disabled:opacity-60"
                   >
                     {selectedBusy ? "Filling..." : "Run Demo Visual Fill"}
                   </button>
-                  {readiness.predict.state !== "ready" && (
-                    <p className="text-xs text-yellow-300">Live inference disabled until readiness is green for Live Inference Path.</p>
+                  {readiness.readyz.state === "down" && (
+                    <p className="text-xs text-yellow-300">Live inference disabled while core service is down.</p>
                   )}
                   <p className="text-sm text-slate-300">{inferStatus}</p>
                   {inferResult && (
@@ -1428,7 +1451,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </p>
                 <button
                   onClick={() => void loadNasaData()}
-                  disabled={nasaBusy || readiness.nasa.state === "down"}
+                  disabled={nasaBusy || readiness.readyz.state === "down"}
                   className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all disabled:opacity-60"
                 >
                   {nasaBusy ? "Loading..." : "Load Everything"}
@@ -1452,13 +1475,13 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </p>
                 <button
                   onClick={() => void runDatasetBatch()}
-                  disabled={batchBusy || readiness.predictDataset.state !== "ready"}
+                  disabled={batchBusy || readiness.readyz.state === "down" || datasetDir.trim().length === 0}
                   className="w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all disabled:opacity-60"
                 >
                   {batchBusy ? "Running..." : "Run Batch"}
                 </button>
-                {readiness.predictDataset.state !== "ready" && (
-                  <p className="text-xs text-yellow-300 mt-2">Batch disabled until dataset path checks are green.</p>
+                {(readiness.readyz.state === "down" || datasetDir.trim().length === 0) && (
+                  <p className="text-xs text-yellow-300 mt-2">Batch disabled until core service is up and folder path is set.</p>
                 )}
                 <p className="text-xs text-slate-300 mt-3">{batchStatus}</p>
                 {batchResult && (
@@ -1484,21 +1507,21 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <div className="space-y-2">
                   <button
                     onClick={() => void scanExplorer()}
-                    disabled={explorerBusy || readiness.datasetInventory.state !== "ready"}
+                    disabled={explorerBusy}
                     className="w-full px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition-all disabled:opacity-60"
                   >
                     {explorerBusy ? "Scanning..." : "Explore Files"}
                   </button>
                   <button
                     onClick={() => void runSelectedImage()}
-                    disabled={selectedBusy || !selectedPath || readiness.predictFile.state !== "ready"}
+                    disabled={selectedBusy || !selectedPath || readiness.readyz.state === "down"}
                     className="w-full px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all disabled:opacity-60"
                   >
                     {selectedBusy ? "Running..." : "Run Selected Image"}
                   </button>
                 </div>
-                {(readiness.datasetInventory.state !== "ready" || readiness.predictFile.state !== "ready") && (
-                  <p className="text-xs text-yellow-300 mt-2">Explorer actions are locked until readiness checks pass.</p>
+                {readiness.readyz.state === "down" && (
+                  <p className="text-xs text-yellow-300 mt-2">Run Selected Image is disabled while core service is down.</p>
                 )}
                 <p className="text-xs text-slate-300 mt-3">{explorerStatus}</p>
                 {explorerItems.length > 0 && (
@@ -1570,7 +1593,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <p className="text-sm uppercase tracking-widest text-slate-400">Reliability Diagram</p>
                 <button
                   onClick={() => void loadCalibration()}
-                  disabled={calibrationBusy || readiness.predictDataset.state !== "ready"}
+                  disabled={calibrationBusy || readiness.readyz.state === "down" || datasetDir.trim().length === 0}
                   className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
                 >
                   {calibrationBusy ? "Loading..." : "Load Calibration Report"}
