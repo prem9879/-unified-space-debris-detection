@@ -21,7 +21,11 @@ ChartJS.register(
   RadialLinearScale
 );
 
-export function DashboardPage(): ReactElement {
+interface DashboardPageProps {
+  onNavigate?: () => void;
+}
+
+export function DashboardPage({ onNavigate }: DashboardPageProps): ReactElement {
   const [token, setToken] = useState<string>("");
   const [lastSummary, setLastSummary] = useState<string>("Upload images to begin detection");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -144,6 +148,15 @@ export function DashboardPage(): ReactElement {
               >
                 {theme === "dark" ? "☀️" : "🌙"}
               </button>
+
+              {onNavigate && (
+                <button
+                  onClick={onNavigate}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white text-sm font-medium transition-all shadow-lg shadow-cyan-500/30"
+                >
+                  🏠 Home
+                </button>
+              )}
             </motion.div>
           </div>
         </div>
