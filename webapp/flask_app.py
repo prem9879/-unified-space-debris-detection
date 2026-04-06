@@ -13,6 +13,7 @@ from io import BytesIO
 from pathlib import Path
 import sys
 from threading import Lock
+from typing import TypedDict, cast
 
 import numpy as np
 import pandas as pd
@@ -23,15 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.data.dataset_catalog import curated_sources
-from src.data.local_dataset_loader import (
+from src.data.dataset_catalog import curated_sources  # noqa: E402
+from src.data.local_dataset_loader import (  # noqa: E402
     build_dataset_inventory,
     discover_modality_paths,
     image_file_to_base64,
 )
-from src.data.nasa_odpo_loader import load_public_nasa_odpo_data
-from src.inference.service import PreprocessOptions, UnifiedInferenceService
-from src.security.secrets_manager import as_role_map, as_rotation_info, get_api_key_ring
+from src.data.nasa_odpo_loader import load_public_nasa_odpo_data  # noqa: E402
+from src.inference.service import PreprocessOptions, UnifiedInferenceService  # noqa: E402
+from src.security.secrets_manager import as_role_map, as_rotation_info, get_api_key_ring  # noqa: E402
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
@@ -45,6 +46,16 @@ _RATE_LIMIT_STATE: dict[str, object] = {"window_start": 0.0, "buckets": {}}
 _RATE_LIMIT_LOCK = Lock()
 _ABUSE_STATE: dict[str, object] = {"invalid": {}, "locked_until": {}, "window_start": 0.0, "request_counts": {}}
 _AUDIT_STATE: dict[str, object] = {"last_sig": "", "last_prune_ts": 0.0}
+
+
+class OrbitalObject(TypedDict):
+    norad_cat_id: int
+    name: str
+    altitude_km: float
+    inclination_deg: float
+    relative_velocity_km_s: float
+    collision_density: float
+    shell: str
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -101,7 +112,7 @@ def _check_rate_limit(limit_per_min: int, identity: str) -> tuple[bool, int]:
     now = time.time()
     with _RATE_LIMIT_LOCK:
         window_start = float(_RATE_LIMIT_STATE["window_start"])
-        buckets = _RATE_LIMIT_STATE["buckets"]
+        buckets = cast(dict[str, int], _RATE_LIMIT_STATE["buckets"])
         if now - window_start >= 60.0:
             _RATE_LIMIT_STATE["window_start"] = now
             buckets = {}
@@ -130,8 +141,8 @@ def _abuse_window_tick() -> None:
 
 def _register_invalid_key_attempt(identity: str, cfg: dict[str, object]) -> tuple[bool, int]:
     now = time.time()
-    invalid = _ABUSE_STATE["invalid"]
-    locked_until = _ABUSE_STATE["locked_until"]
+    invalid = cast(dict[str, int], _ABUSE_STATE["invalid"])
+    locked_until = cast(dict[str, int], _ABUSE_STATE["locked_until"])
     current = int(invalid.get(identity, 0)) + 1
     invalid[identity] = current
     if current >= int(cfg["invalid_key_lockout_threshold"]):
@@ -143,14 +154,14 @@ def _register_invalid_key_attempt(identity: str, cfg: dict[str, object]) -> tupl
 
 def _is_locked(identity: str) -> tuple[bool, int]:
     now = int(time.time())
-    locked_until = _ABUSE_STATE["locked_until"]
+    locked_until = cast(dict[str, int], _ABUSE_STATE["locked_until"])
     until = int(locked_until.get(identity, 0))
     return until > now, until
 
 
 def _register_request_and_anomaly(identity: str, cfg: dict[str, object]) -> bool:
     _abuse_window_tick()
-    request_counts = _ABUSE_STATE["request_counts"]
+    request_counts = cast(dict[str, int], _ABUSE_STATE["request_counts"])
     current = int(request_counts.get(identity, 0)) + 1
     request_counts[identity] = current
     return current > int(cfg["anomaly_threshold_per_min"])
@@ -515,8 +526,10 @@ def _build_operational_summary(decision_basis: dict[str, object]) -> dict[str, o
         "suffix": "Use the model output as the default operational guide.",
         "review_floor": 0.5,
     })
+    bias = float(profile_settings["bias"])
+    review_floor = float(profile_settings["review_floor"])
 
-    adjusted_collision = max(0.0, min(1.0, collision_probability + profile_settings["bias"]))
+    adjusted_collision = max(0.0, min(1.0, collision_probability + bias))
 
     if label == "uncertain":
         priority = "manual_review"
@@ -525,7 +538,7 @@ def _build_operational_summary(decision_basis: dict[str, object]) -> dict[str, o
         if adjusted_collision >= 0.7:
             priority = "urgent"
             action = "Escalate immediately for conjunction screening and orbit review."
-        elif adjusted_collision >= profile_settings["review_floor"]:
+        elif adjusted_collision >= review_floor:
             priority = "high"
             action = "Review trajectory and confirm with additional measurements."
         else:
@@ -786,7 +799,7 @@ def _build_orbital_brief() -> dict[str, object]:
         ],
     }
 
-    sample_objects = [
+    sample_objects: list[OrbitalObject] = [
         {"norad_cat_id": 25544, "name": "ISS", "altitude_km": 408.0, "inclination_deg": 51.6, "relative_velocity_km_s": 7.66, "collision_density": 0.18, "shell": "LEO"},
         {"norad_cat_id": 43013, "name": "DEBRIS-A", "altitude_km": 612.0, "inclination_deg": 97.4, "relative_velocity_km_s": 10.8, "collision_density": 0.41, "shell": "LEO"},
         {"norad_cat_id": 39120, "name": "DEBRIS-B", "altitude_km": 799.0, "inclination_deg": 98.0, "relative_velocity_km_s": 11.2, "collision_density": 0.58, "shell": "LEO"},
@@ -795,8 +808,8 @@ def _build_orbital_brief() -> dict[str, object]:
         {"norad_cat_id": 49812, "name": "DEBRIS-E", "altitude_km": 1180.0, "inclination_deg": 71.0, "relative_velocity_km_s": 9.7, "collision_density": 0.63, "shell": "LEO"},
     ]
 
-    scene_objects = []
-    collision_alerts = []
+    scene_objects: list[dict[str, object]] = []
+    collision_alerts: list[dict[str, object]] = []
     for index, obj in enumerate(sample_objects):
         base_risk = 0.38 * obj["collision_density"] + 0.25 * (obj["relative_velocity_km_s"] / 12.0) + 0.22 * (obj["inclination_deg"] / 180.0)
         shell_bonus = 0.18 if obj["shell"] == "LEO" else (0.10 if obj["shell"] == "MEO" else 0.06)
@@ -822,7 +835,7 @@ def _build_orbital_brief() -> dict[str, object]:
                 }
             )
 
-    collision_alerts = sorted(collision_alerts, key=lambda item: item["risk_score"], reverse=True)
+    collision_alerts = sorted(collision_alerts, key=lambda item: float(item["risk_score"]), reverse=True)
 
     research_edges = {
         "unique_contribution": "A physics-gated, multimodal collision intelligence stack that mixes orbital screening, learned sequence models, and explainable risk bands.",

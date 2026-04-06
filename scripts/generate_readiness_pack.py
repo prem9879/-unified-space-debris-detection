@@ -21,11 +21,15 @@ def build_pack(manifest: Path, benchmark: Path, calibration: Path, slo: Path, se
     security_payload = _load_json(security_policy)
     hard_negative_payload = _load_json(hard_negative)
 
+    benchmark_results = benchmark_payload.get("results", {})
+    if not benchmark_results:
+        benchmark_results = benchmark_payload.get("benchmark", {}).get("best_model", {})
+
     gates = {
         "scientific": bool(manifest_payload.get("manifest_digest") and calibration_payload.get("acceptance_gates")),
         "reliability": bool(slo_payload.get("latency_ms")),
         "security": bool(security_payload.get("auth_required") is not None),
-        "deployment": bool(benchmark_payload.get("results")),
+        "deployment": bool(benchmark_results),
         "hard_negatives": bool(hard_negative_payload.get("summary", {}).get("total_files", 0) >= 0),
     }
 
@@ -35,7 +39,7 @@ def build_pack(manifest: Path, benchmark: Path, calibration: Path, slo: Path, se
             "manifest_digest": manifest_payload.get("manifest_digest"),
             "split_protocol": manifest_payload.get("split_protocol", {}),
             "class_balance": manifest_payload.get("class_counts", {}),
-            "benchmark_best_model": benchmark_payload.get("results", {}),
+            "benchmark_best_model": benchmark_results,
             "calibration_acceptance": calibration_payload.get("acceptance_gates", {}),
             "slo": slo_payload,
             "security_policy": security_payload,

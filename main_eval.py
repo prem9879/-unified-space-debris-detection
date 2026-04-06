@@ -15,12 +15,12 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.data.synthetic_dataset import SyntheticDebrisDataset
-from src.inference.service import UnifiedInferenceService
-from src.evaluation.classification_metrics import compute_classification_metrics
-from src.evaluation.collision_metrics import compute_auc_roc, compute_brier, compute_ece
-from src.evaluation.detection_metrics import compute_auc, tpr_at_fpr
-from src.evaluation.orbit_metrics import position_rmse
+from src.data.synthetic_dataset import SyntheticDebrisDataset  # noqa: E402
+from src.inference.service import UnifiedInferenceService  # noqa: E402
+from src.evaluation.classification_metrics import compute_classification_metrics  # noqa: E402
+from src.evaluation.collision_metrics import compute_auc_roc, compute_brier, compute_ece  # noqa: E402
+from src.evaluation.detection_metrics import compute_auc, tpr_at_fpr  # noqa: E402
+from src.evaluation.orbit_metrics import position_rmse  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate UnifiedDebrisNet")

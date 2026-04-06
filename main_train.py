@@ -15,13 +15,13 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.data.synthetic_dataset import SyntheticDebrisDataset
-from src.models.unified_debris_net import UnifiedDebrisNet
-from src.training.trainer import Trainer
-from src.losses.multitask_loss import MultiTaskLoss
-from src.losses.physics_loss import PhysicsRadarLoss
-from src.losses.sgp4_loss import SGP4ResidualLoss
-from src.losses.calibration_loss import ECELoss
+from src.data.synthetic_dataset import SyntheticDebrisDataset  # noqa: E402
+from src.models.unified_debris_net import UnifiedDebrisNet  # noqa: E402
+from src.training.trainer import Trainer  # noqa: E402
+from src.losses.multitask_loss import MultiTaskLoss  # noqa: E402
+from src.losses.physics_loss import PhysicsRadarLoss  # noqa: E402
+from src.losses.sgp4_loss import SGP4ResidualLoss  # noqa: E402
+from src.losses.calibration_loss import ECELoss  # noqa: E402
 
 
 def load_config(config_path: Path) -> dict:

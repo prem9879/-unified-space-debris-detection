@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from webapp.flask_app import _security_config
+from webapp.flask_app import _security_config  # noqa: E402
 
 
 def main() -> None:
