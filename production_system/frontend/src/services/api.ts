@@ -73,6 +73,9 @@ export async function legacyPredict(params: {
   imageSize: number;
   opticalBand: string;
   normalizeMode: string;
+  cameraThreshold?: number;
+  operatorProfile?: string;
+  layerName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -82,6 +85,9 @@ export async function legacyPredict(params: {
   form.append("image_size", String(params.imageSize));
   form.append("optical_band", params.opticalBand);
   form.append("normalize_mode", params.normalizeMode);
+  form.append("camera_threshold", String(params.cameraThreshold ?? 0));
+  form.append("operator_profile", params.operatorProfile ?? "balanced");
+  if (params.layerName) form.append("layer_name", params.layerName);
 
   const res = await fetch(`${LEGACY_API_BASE}/predict`, {
     method: "POST",
@@ -114,6 +120,8 @@ export async function legacyPredictDataset(params: {
   imageSize: number;
   opticalBand: string;
   normalizeMode: string;
+  cameraThreshold?: number;
+  operatorProfile?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -123,6 +131,8 @@ export async function legacyPredictDataset(params: {
   form.append("image_size", String(params.imageSize));
   form.append("optical_band", params.opticalBand);
   form.append("normalize_mode", params.normalizeMode);
+  form.append("camera_threshold", String(params.cameraThreshold ?? 0));
+  form.append("operator_profile", params.operatorProfile ?? "balanced");
 
   const res = await fetch(`${LEGACY_API_BASE}/predict_dataset`, {
     method: "POST",
@@ -151,6 +161,9 @@ export async function legacyPredictFile(params: {
   imageSize: number;
   opticalBand: string;
   normalizeMode: string;
+  cameraThreshold?: number;
+  operatorProfile?: string;
+  layerName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -159,6 +172,9 @@ export async function legacyPredictFile(params: {
   form.append("image_size", String(params.imageSize));
   form.append("optical_band", params.opticalBand);
   form.append("normalize_mode", params.normalizeMode);
+  form.append("camera_threshold", String(params.cameraThreshold ?? 0));
+  form.append("operator_profile", params.operatorProfile ?? "balanced");
+  if (params.layerName) form.append("layer_name", params.layerName);
 
   const res = await fetch(`${LEGACY_API_BASE}/predict_file`, {
     method: "POST",
@@ -177,6 +193,7 @@ export async function legacyCalibrationReport(params: {
   imageSize: number;
   opticalBand: string;
   normalizeMode: string;
+  cameraThreshold?: number;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -187,6 +204,7 @@ export async function legacyCalibrationReport(params: {
   form.append("image_size", String(params.imageSize));
   form.append("optical_band", params.opticalBand);
   form.append("normalize_mode", params.normalizeMode);
+  form.append("camera_threshold", String(params.cameraThreshold ?? 0));
 
   const res = await fetch(`${LEGACY_API_BASE}/calibration_report`, {
     method: "POST",
@@ -213,6 +231,13 @@ export async function legacyModelBenchmark(apiKey?: string): Promise<any> {
 
 export async function legacyOrbitalBrief(apiKey?: string): Promise<any> {
   const res = await fetch(`${LEGACY_API_BASE}/orbital_brief`, {
+    headers: legacyHeaders(apiKey),
+  });
+  return parseLegacyResponse(res);
+}
+
+export async function legacyOptions(apiKey?: string): Promise<any> {
+  const res = await fetch(`${LEGACY_API_BASE}/options`, {
     headers: legacyHeaders(apiKey),
   });
   return parseLegacyResponse(res);

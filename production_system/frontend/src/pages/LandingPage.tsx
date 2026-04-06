@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { type ReactElement, useEffect, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import {
   CategoryScale,
@@ -17,6 +17,7 @@ import {
   legacyDatasetInventory,
   legacyLoadAllPublicData,
   legacyModelBenchmark,
+  legacyOptions,
   legacyOrbitalBrief,
   legacyPredict,
   legacyPredictDataset,
@@ -60,6 +61,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [inferBusy, setInferBusy] = useState<boolean>(false);
   const [inferStatus, setInferStatus] = useState<string>("Ready for live inference.");
   const [inferResult, setInferResult] = useState<any>(null);
+  const [operatorProfile, setOperatorProfile] = useState<string>("balanced");
+  const [cameraThreshold, setCameraThreshold] = useState<number>(0.22);
+  const [selectedLayer, setSelectedLayer] = useState<string>("");
+  const [availableLayers, setAvailableLayers] = useState<string[]>([]);
+  const [datasetSources, setDatasetSources] = useState<any[]>([]);
 
   const [nasaBusy, setNasaBusy] = useState<boolean>(false);
   const [nasaStatus, setNasaStatus] = useState<string>("NASA loader not started.");
@@ -327,6 +333,15 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         },
       }));
     }
+
+    try {
+      const options = await legacyOptions(legacyApiKey);
+      setAvailableLayers(Array.isArray(options?.layers) ? options.layers : []);
+      setDatasetSources(Array.isArray(options?.dataset_sources) ? options.dataset_sources : []);
+    } catch {
+      setAvailableLayers([]);
+      setDatasetSources([]);
+    }
   };
 
   const runStartupChecks = async () => {
@@ -430,6 +445,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        cameraThreshold,
+        operatorProfile,
+        layerName: selectedLayer || undefined,
         apiKey: legacyApiKey,
       });
       setInferResult(payload);
@@ -474,6 +492,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        cameraThreshold,
+        operatorProfile,
         apiKey: legacyApiKey,
       });
       setBatchResult(result);
@@ -524,6 +544,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             imageSize,
             opticalBand,
             normalizeMode,
+            cameraThreshold,
+            operatorProfile,
+            layerName: selectedLayer || undefined,
             apiKey: legacyApiKey,
           });
           const thumb = await fileToDataUrl(file);
@@ -617,6 +640,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        cameraThreshold,
+        operatorProfile,
+        layerName: selectedLayer || undefined,
         apiKey: legacyApiKey,
       });
       setSelectedResult(result);
@@ -646,6 +672,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        cameraThreshold,
+        operatorProfile,
+        layerName: selectedLayer || undefined,
         apiKey: legacyApiKey,
       });
       setInferResult(result);
@@ -671,6 +700,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        cameraThreshold,
         apiKey: legacyApiKey,
       });
       setCalibrationReport(report);
@@ -748,6 +778,32 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         tension: 0.25,
       },
     ],
+  };
+
+  const orbitalScene: any[] = Array.isArray(orbitalBrief?.visualization?.scene)
+    ? orbitalBrief.visualization.scene
+    : [];
+  const orbitalAlerts: any[] = Array.isArray(orbitalBrief?.visualization?.alerts)
+    ? orbitalBrief.visualization.alerts
+    : Array.isArray(orbitalBrief?.alerts)
+      ? orbitalBrief.alerts
+      : [];
+  const trackedCount = orbitalScene.length || Number(orbitalBrief?.stats?.tracked_objects ?? 6);
+  const shellCount = Number(orbitalBrief?.visualization?.shells?.length ?? orbitalBrief?.stats?.shells ?? 3);
+  const alertCount = orbitalAlerts.length || Number(orbitalBrief?.stats?.alerts ?? 0);
+
+  const markerStyle = (obj: any, idx: number): CSSProperties => {
+    const phase = Number(obj?.orbit_phase ?? (idx + 1) / 6);
+    const shell = String(obj?.shell ?? "LEO").toUpperCase();
+    const ring = shell === "GEO" ? 46 : shell === "MEO" ? 34 : 24;
+    const angle = phase * Math.PI * 2 + idx * 0.35;
+    const x = 50 + Math.cos(angle) * ring;
+    const y = 50 + Math.sin(angle) * ring;
+    return {
+      left: `${x}%`,
+      top: `${y}%`,
+      transform: "translate(-50%, -50%)",
+    };
   };
 
   return (
@@ -1087,29 +1143,70 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         >
           <div className="mx-auto max-w-7xl">
             <h2 className="text-3xl lg:text-4xl font-black text-white mb-3">Orbital Mission Deck</h2>
-            <p className="text-slate-300 mb-8">This panel is the 3D-facing part of the system. It shows orbit shells, scene context, and the current collision-alert queue before the charts below.</p>
+            <p className="text-slate-300 mb-8">Clear orbital map, risk-coded objects, and alert queue in one mission view.</p>
             <div className="grid lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 rounded-xl bg-slate-900/60 border border-slate-700/50 p-6">
+              <div className="lg:col-span-2 rounded-2xl bg-gradient-to-br from-slate-900/85 via-blue-950/60 to-slate-950/90 border border-cyan-500/20 p-6 shadow-[0_0_30px_rgba(14,165,233,0.12)]">
                 <p className="text-sm uppercase tracking-widest text-slate-400 mb-2">Orbital Situation Map</p>
-                <p className="text-sm text-slate-300 mb-4">A shell-based orbit map with risk-coded markers.</p>
+                <p className="text-sm text-slate-300 mb-4">A shell-based orbit map with risk-coded markers. It is deliberately restrained so the data reads clearly before the chart noise below.</p>
+                <div className="relative h-[420px] rounded-2xl border border-slate-700/50 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.16),rgba(2,6,23,0.96)_62%)] overflow-hidden mb-4">
+                  <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.06)_1px,transparent_1px)] bg-[size:56px_56px]" />
+                  {[24, 34, 46].map((ring, idx) => (
+                    <div
+                      key={ring}
+                      className="absolute rounded-full border"
+                      style={{
+                        left: "50%",
+                        top: "50%",
+                        width: `${ring * 2}%`,
+                        height: `${ring * 2}%`,
+                        transform: "translate(-50%, -50%)",
+                        borderColor: idx === 0 ? "rgba(56,189,248,0.35)" : idx === 1 ? "rgba(125,211,252,0.28)" : "rgba(165,180,252,0.24)",
+                      }}
+                    />
+                  ))}
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(191,219,254,0.6),rgba(30,64,175,0.28)_55%,rgba(15,23,42,0.95)_100%)] border border-blue-200/15 shadow-[0_0_40px_rgba(56,189,248,0.22)] flex items-center justify-center">
+                    <span className="text-slate-100 font-black tracking-[0.2em] text-sm">EARTH</span>
+                  </div>
+                  {(orbitalScene.length > 0
+                    ? orbitalScene.slice(0, 10)
+                    : [
+                        { name: "DEBRIS-A", shell: "LEO", risk_score: 0.68, color: "#fbbf24", orbit_phase: 0.2 },
+                        { name: "DEBRIS-B", shell: "LEO", risk_score: 0.75, color: "#ff5d5d", orbit_phase: 0.58 },
+                        { name: "DEBRIS-C", shell: "MEO", risk_score: 0.45, color: "#fbbf24", orbit_phase: 0.1 },
+                        { name: "ISS", shell: "LEO", risk_score: 0.47, color: "#35d1ff", orbit_phase: 0.87 },
+                        { name: "DEBRIS-E", shell: "LEO", risk_score: 0.71, color: "#ff5d5d", orbit_phase: 0.32 },
+                      ]).map((obj: any, idx: number) => (
+                    <div key={`${String(obj?.name ?? "obj")}-${idx}`} className="absolute" style={markerStyle(obj, idx)}>
+                      <div className="rounded-lg px-2 py-1 border border-slate-600/70 bg-slate-950/80 backdrop-blur-sm min-w-[98px] text-center shadow-[0_0_12px_rgba(15,23,42,0.65)]">
+                        <div className="w-3 h-3 rounded-full mx-auto mb-1" style={{ backgroundColor: String(obj?.color ?? "#35d1ff"), boxShadow: `0 0 14px ${String(obj?.color ?? "#35d1ff")}` }} />
+                        <p className="text-[11px] font-semibold text-slate-100 leading-none">{String(obj?.name ?? "OBJECT")}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-none">{String(obj?.shell ?? "LEO")} - {(Number(obj?.risk_score ?? 0) * 100).toFixed(0)}%</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Tracked Objects</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.tracked_objects ?? 6}</p></div>
-                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Shells</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.shells ?? 3}</p></div>
-                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Alerts</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.alerts ?? 4}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Tracked Objects</p><p className="text-xl font-bold text-white">{trackedCount}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Shells</p><p className="text-xl font-bold text-white">{shellCount}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Alerts</p><p className="text-xl font-bold text-white">{alertCount}</p></div>
                   <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Mode</p><p className="text-sm font-bold text-white">Physics-gated fusion</p></div>
                 </div>
               </div>
-              <div className="rounded-xl bg-slate-900/60 border border-slate-700/50 p-6">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-900/85 via-slate-900/80 to-slate-950/90 border border-slate-700/60 p-6 shadow-[0_0_20px_rgba(15,23,42,0.35)]">
                 <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Collision Alert Panel</p>
                 <div className="space-y-3 text-sm text-slate-200">
-                  {(orbitalBrief?.alerts ?? [
-                    { object_name: "DEBRIS-B", level: "HIGH", risk_percent: 75.4, note: "Escalate conjunction review" },
-                    { object_name: "DEBRIS-E", level: "HIGH", risk_percent: 70.8, note: "Escalate conjunction review" },
-                    { object_name: "DEBRIS-A", level: "MEDIUM", risk_percent: 68.0, note: "Track closely" },
-                  ]).slice(0, 4).map((alert: any, idx: number) => (
-                    <div key={idx} className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3">
-                      <p className="font-semibold">{alert.object_name} ({alert.level})</p>
-                      <p className="text-slate-400">Risk {Number(alert.risk_percent ?? 0).toFixed(1)}% - {alert.note ?? "Review"}</p>
+                  {(orbitalAlerts.length > 0 ? orbitalAlerts : [
+                    { object: "DEBRIS-B", risk_band: "HIGH", risk_score: 0.754, recommended_action: "Escalate conjunction review" },
+                    { object: "DEBRIS-E", risk_band: "HIGH", risk_score: 0.708, recommended_action: "Escalate conjunction review" },
+                    { object: "DEBRIS-A", risk_band: "MEDIUM", risk_score: 0.680, recommended_action: "Track closely" },
+                  ]).slice(0, 5).map((alert: any, idx: number) => (
+                    <div key={idx} className="rounded-xl bg-slate-800/70 border border-slate-700/50 p-4">
+                      <p className="font-semibold text-lg leading-tight">
+                        {String(alert.object ?? alert.object_name ?? "OBJECT")} ({String(alert.risk_band ?? alert.level ?? "MEDIUM")})
+                      </p>
+                      <p className="text-slate-300 mt-2">
+                        NORAD {String(alert.norad_cat_id ?? "-")} · Risk {(Number(alert.risk_score ?? alert.risk_percent ?? 0) * (Number(alert.risk_score ?? 0) <= 1 ? 100 : 1)).toFixed(1)}% · {String(alert.recommended_action ?? alert.note ?? "Track closely")}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1389,6 +1486,45 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     >
                       <option value="unit">Unit [0,1]</option>
                       <option value="zscore">Z-Score</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Operator Profile</label>
+                    <select
+                      value={operatorProfile}
+                      onChange={(event) => setOperatorProfile(event.target.value)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    >
+                      <option value="balanced">Balanced</option>
+                      <option value="conservative">Conservative</option>
+                      <option value="exploratory">Exploratory</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">
+                      Camera Threshold ({cameraThreshold.toFixed(2)})
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={cameraThreshold}
+                      onChange={(event) => setCameraThreshold(Number(event.target.value || 0.22))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Inspect Layer</label>
+                    <select
+                      value={selectedLayer}
+                      onChange={(event) => setSelectedLayer(event.target.value)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    >
+                      <option value="">None</option>
+                      {availableLayers.map((layer) => (
+                        <option key={layer} value={layer}>{layer}</option>
+                      ))}
                     </select>
                   </div>
                   <button
@@ -1802,12 +1938,45 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
                 <p className="text-xs uppercase tracking-widest text-slate-400">Reference Sources</p>
                 <p className="text-sm text-slate-300 mt-2">NASA ODPO, CelesTrak, and catalog links remain available through the integrated loader and mission deck sections.</p>
+                {datasetSources.length > 0 && (
+                  <ul className="text-xs text-slate-300 mt-3 space-y-1 max-h-32 overflow-auto">
+                    {datasetSources.slice(0, 8).map((src: any, idx: number) => (
+                      <li key={`${idx}-${String(src?.name ?? "source")}`}>• {String(src?.name ?? "source")} {src?.url ? `- ${String(src.url)}` : ""}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
                 <p className="text-xs uppercase tracking-widest text-slate-400">Operational Note</p>
                 <p className="text-sm text-slate-300 mt-2">No separate console handoff required. Keep operations in this combined interface for end-to-end flow.</p>
               </div>
             </div>
+            {orbitalBrief && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Model Stack (Old Console)</p>
+                  <div className="mt-2 space-y-2 text-sm text-slate-300">
+                    {(orbitalBrief.model_stack ?? []).slice(0, 6).map((model: any, idx: number) => (
+                      <div key={`${idx}-${String(model?.name ?? "model")}`} className="rounded bg-slate-800/60 p-2 border border-slate-700/50">
+                        <p className="font-semibold text-cyan-300">{String(model?.name ?? "-")}</p>
+                        <p>Use: {String(model?.use ?? "-")}</p>
+                        <p className="text-xs text-slate-400">Why: {String(model?.why ?? "-")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Deployment/API Stack</p>
+                  <div className="mt-2 text-sm text-slate-300 space-y-2">
+                    <p>Backend: {String(orbitalBrief?.deployment?.backend ?? "-")}</p>
+                    <p>Frontend: {String(orbitalBrief?.deployment?.frontend ?? "-")}</p>
+                    <p>Database: {String(orbitalBrief?.deployment?.database ?? "-")}</p>
+                    <p>Cloud: {String(orbitalBrief?.deployment?.cloud ?? "-")}</p>
+                    <p className="text-xs text-slate-400">APIs: {Array.isArray(orbitalBrief?.deployment?.api) ? orbitalBrief.deployment.api.join(", ") : "-"}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>}
 
