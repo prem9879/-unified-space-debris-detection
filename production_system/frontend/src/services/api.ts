@@ -76,6 +76,7 @@ export async function legacyPredict(params: {
   cameraThreshold?: number;
   operatorProfile?: string;
   layerName?: string;
+  modelName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -87,6 +88,7 @@ export async function legacyPredict(params: {
   form.append("normalize_mode", params.normalizeMode);
   form.append("camera_threshold", String(params.cameraThreshold ?? 0));
   form.append("operator_profile", params.operatorProfile ?? "balanced");
+  form.append("model_name", params.modelName ?? "unified_latest");
   if (params.layerName) form.append("layer_name", params.layerName);
 
   const res = await fetch(`${LEGACY_API_BASE}/predict`, {
@@ -122,6 +124,7 @@ export async function legacyPredictDataset(params: {
   normalizeMode: string;
   cameraThreshold?: number;
   operatorProfile?: string;
+  modelName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -133,6 +136,7 @@ export async function legacyPredictDataset(params: {
   form.append("normalize_mode", params.normalizeMode);
   form.append("camera_threshold", String(params.cameraThreshold ?? 0));
   form.append("operator_profile", params.operatorProfile ?? "balanced");
+  form.append("model_name", params.modelName ?? "unified_latest");
 
   const res = await fetch(`${LEGACY_API_BASE}/predict_dataset`, {
     method: "POST",
@@ -164,6 +168,7 @@ export async function legacyPredictFile(params: {
   cameraThreshold?: number;
   operatorProfile?: string;
   layerName?: string;
+  modelName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -174,6 +179,7 @@ export async function legacyPredictFile(params: {
   form.append("normalize_mode", params.normalizeMode);
   form.append("camera_threshold", String(params.cameraThreshold ?? 0));
   form.append("operator_profile", params.operatorProfile ?? "balanced");
+  form.append("model_name", params.modelName ?? "unified_latest");
   if (params.layerName) form.append("layer_name", params.layerName);
 
   const res = await fetch(`${LEGACY_API_BASE}/predict_file`, {
@@ -194,6 +200,7 @@ export async function legacyCalibrationReport(params: {
   opticalBand: string;
   normalizeMode: string;
   cameraThreshold?: number;
+  modelName?: string;
   apiKey?: string;
 }): Promise<any> {
   const form = new FormData();
@@ -205,6 +212,7 @@ export async function legacyCalibrationReport(params: {
   form.append("optical_band", params.opticalBand);
   form.append("normalize_mode", params.normalizeMode);
   form.append("camera_threshold", String(params.cameraThreshold ?? 0));
+  form.append("model_name", params.modelName ?? "unified_latest");
 
   const res = await fetch(`${LEGACY_API_BASE}/calibration_report`, {
     method: "POST",

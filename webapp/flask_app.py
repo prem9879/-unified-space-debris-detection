@@ -41,8 +41,10 @@ CHECKPOINT = ROOT / "artifacts" / "checkpoints" / "unified_latest.pt"
 REPORT = ROOT / "artifacts" / "eval_report.json"
 DEFAULT_IMAGES_DIR = Path(r"c:\Users\PREM DIWAN\Desktop\ml\images")
 FRONTEND_DIST = ROOT / "production_system" / "frontend" / "dist"
+IMAGE_BENCH_SUMMARY = ROOT / "artifacts" / "image_bench" / "image_bench_summary.json"
 
 service: UnifiedInferenceService | None = None
+service_cache: dict[str, UnifiedInferenceService] = {}
 _RATE_LIMIT_STATE: dict[str, object] = {"window_start": 0.0, "buckets": {}}
 _RATE_LIMIT_LOCK = Lock()
 _ABUSE_STATE: dict[str, object] = {"invalid": {}, "locked_until": {}, "window_start": 0.0, "request_counts": {}}
@@ -700,11 +702,40 @@ def _compute_binary_calibration(samples: list[tuple[float, int]], bins: int = 10
     }
 
 
-def _load_service() -> UnifiedInferenceService:
+def _resolve_model_checkpoint_map() -> dict[str, Path]:
+    mapping = {"unified_latest": CHECKPOINT}
+    payload = _load_json_if_exists(IMAGE_BENCH_SUMMARY)
+    for model_name, stats in (payload.get("results", {}) or {}).items():
+        checkpoint_raw = str((stats or {}).get("checkpoint", "")).strip()
+        if not checkpoint_raw:
+            continue
+        checkpoint_path = Path(checkpoint_raw)
+        if not checkpoint_path.is_absolute():
+            checkpoint_path = ROOT / checkpoint_path
+        mapping[str(model_name).strip().lower()] = checkpoint_path
+    return mapping
+
+
+def _load_service(model_name: str | None = None) -> UnifiedInferenceService:
     global service
-    if service is None:
-        service = UnifiedInferenceService(CHECKPOINT, allow_demo_mode=True)
-    return service
+    key = (model_name or "unified_latest").strip().lower() or "unified_latest"
+
+    if key == "unified_latest":
+        if service is None:
+            service = UnifiedInferenceService(CHECKPOINT, allow_demo_mode=True)
+        return service
+
+    if key in service_cache:
+        return service_cache[key]
+
+    model_map = _resolve_model_checkpoint_map()
+    checkpoint = model_map.get(key)
+    if checkpoint is None:
+        raise ValueError(f"Unknown model_name '{key}'. Use /options to see available model choices.")
+
+    loaded = UnifiedInferenceService(checkpoint, allow_demo_mode=True)
+    service_cache[key] = loaded
+    return loaded
 
 
 def _load_json_if_exists(path: Path) -> dict[str, object]:
@@ -946,6 +977,7 @@ def options():
             layers = _load_service().list_layers()
         except Exception:
             layers = []
+    model_choices = sorted(_resolve_model_checkpoint_map().keys())
     return jsonify(
         {
             "layers": layers,
@@ -953,6 +985,7 @@ def options():
             "normalize_modes": ["unit", "zscore", "none"],
             "image_sizes": [64, 96, 128, 160, 224],
             "dataset_sources": curated_sources(),
+            "model_choices": model_choices,
         }
     )
 
@@ -1064,7 +1097,11 @@ def preview_image():
 @app.post("/legacy-api/predict")
 @require_role("analyst")
 def predict():
-    svc = _load_service()
+    model_name = request.form.get("model_name", "unified_latest").strip().lower() or "unified_latest"
+    try:
+        svc = _load_service(model_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
     optical_image = None
     radar_image = None
@@ -1127,6 +1164,7 @@ def predict():
 
     return jsonify(
         {
+            "requested_model": model_name,
             "operator_profile": operator_profile,
             "detect_probability": result.detect_probability,
             "collision_probability": result.collision_probability,
@@ -1149,7 +1187,11 @@ def predict():
 @app.post("/legacy-api/predict_dataset")
 @require_role("analyst")
 def predict_dataset():
-    svc = _load_service()
+    model_name = request.form.get("model_name", "unified_latest").strip().lower() or "unified_latest"
+    try:
+        svc = _load_service(model_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
     dataset_dir = request.form.get("dataset_dir", "").strip()
     if not dataset_dir:
@@ -1224,6 +1266,7 @@ def predict_dataset():
 
     return jsonify(
         {
+            "requested_model": model_name,
             "dataset_dir": dataset_dir,
             "modality": modality,
             "operator_profile": operator_profile,
@@ -1275,7 +1318,11 @@ def model_benchmark():
 @app.post("/legacy-api/calibration_report")
 @require_role("analyst")
 def calibration_report():
-    svc = _load_service()
+    model_name = request.form.get("model_name", "unified_latest").strip().lower() or "unified_latest"
+    try:
+        svc = _load_service(model_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
     dataset_dir = request.form.get("dataset_dir", "").strip()
     if not dataset_dir:
@@ -1328,6 +1375,7 @@ def calibration_report():
     acceptance = _build_calibration_acceptance(metrics, operating_point=operating_point)
     return jsonify(
         {
+            "requested_model": model_name,
             "dataset_dir": dataset_dir,
             "modality": modality,
             "requested_max_samples": max_samples,
@@ -1345,7 +1393,11 @@ def calibration_report():
 @app.post("/legacy-api/predict_file")
 @require_role("analyst")
 def predict_file():
-    svc = _load_service()
+    model_name = request.form.get("model_name", "unified_latest").strip().lower() or "unified_latest"
+    try:
+        svc = _load_service(model_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
     file_path = request.form.get("file_path", "").strip()
     if not file_path:
@@ -1393,6 +1445,7 @@ def predict_file():
 
     return jsonify(
         {
+            "requested_model": model_name,
             "operator_profile": operator_profile,
             "file_path": file_path,
             "modality": modality,

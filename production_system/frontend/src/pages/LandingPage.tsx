@@ -73,6 +73,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [cameraThreshold, setCameraThreshold] = useState<number>(0.22);
   const [selectedLayer, setSelectedLayer] = useState<string>("");
   const [availableLayers, setAvailableLayers] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>(["unified_latest"]);
+  const [selectedModel, setSelectedModel] = useState<string>("unified_latest");
   const [datasetSources, setDatasetSources] = useState<any[]>([]);
 
   const [nasaBusy, setNasaBusy] = useState<boolean>(false);
@@ -353,9 +355,17 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     try {
       const options = await legacyOptions(legacyApiKey);
       setAvailableLayers(Array.isArray(options?.layers) ? options.layers : []);
+      const models = Array.isArray(options?.model_choices) && options.model_choices.length > 0
+        ? options.model_choices.map((item: any) => String(item))
+        : ["unified_latest"];
+      setAvailableModels(models);
+      if (!models.includes(selectedModel)) {
+        setSelectedModel(models[0] ?? "unified_latest");
+      }
       setDatasetSources(Array.isArray(options?.dataset_sources) ? options.dataset_sources : []);
     } catch {
       setAvailableLayers([]);
+      setAvailableModels(["unified_latest"]);
       setDatasetSources([]);
     }
   };
@@ -481,6 +491,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         cameraThreshold,
         operatorProfile,
         layerName: selectedLayer || undefined,
+        modelName: selectedModel,
         apiKey: legacyApiKey,
       });
       setInferResult(payload);
@@ -531,6 +542,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         normalizeMode,
         cameraThreshold,
         operatorProfile,
+        modelName: selectedModel,
         apiKey: legacyApiKey,
       });
       setBatchResult(result);
@@ -589,6 +601,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             cameraThreshold,
             operatorProfile,
             layerName: selectedLayer || undefined,
+            modelName: selectedModel,
             apiKey: legacyApiKey,
           });
           const thumb = await fileToDataUrl(file);
@@ -689,6 +702,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         cameraThreshold,
         operatorProfile,
         layerName: selectedLayer || undefined,
+        modelName: selectedModel,
         apiKey: legacyApiKey,
       });
       setInferResult(result);
@@ -724,6 +738,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         cameraThreshold,
         operatorProfile,
         layerName: selectedLayer || undefined,
+        modelName: selectedModel,
         apiKey: legacyApiKey,
       });
       setInferResult(result);
@@ -752,6 +767,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         opticalBand,
         normalizeMode,
         cameraThreshold,
+        modelName: selectedModel,
         apiKey: legacyApiKey,
       });
       setCalibrationReport(report);
@@ -1641,6 +1657,19 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                         <option key={layer} value={layer}>{layer}</option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 block">Custom Model</label>
+                    <select
+                      value={selectedModel}
+                      onChange={(event) => setSelectedModel(event.target.value)}
+                      className="w-full rounded-lg bg-slate-700/30 border border-slate-600/30 px-4 py-2 text-slate-200"
+                    >
+                      {availableModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">Selected model applies to live, selected image, batch, and calibration runs.</p>
                   </div>
                   <button
                     onClick={() => void runLivePrediction()}
