@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useState, useEffect, type ReactElement } from "react";
 import { motion } from "framer-motion";
 import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from "chart.js";
@@ -16,6 +16,23 @@ export function DashboardPage(): ReactElement {
   const [timeline, setTimeline] = useState<number>(50);
   const [modelCount, setModelCount] = useState<number>(0);
   const [sloP95, setSloP95] = useState<number>(0);
+
+  // Auto-login on component mount
+  useEffect(() => {
+    const autoLogin = async () => {
+      try {
+        const jwt = await login("analyst", "analyst123");
+        setToken(jwt);
+        const models = await fetchModels(jwt);
+        setModelCount(models.models?.length ?? 0);
+        const slo = await fetchSLO(jwt);
+        setSloP95(slo.api_latency_ms_p95 ?? 0);
+      } catch (error) {
+        console.error("Auto-login failed:", error);
+      }
+    };
+    void autoLogin();
+  }, []);
 
   const onLogin = async () => {
     const jwt = await login("analyst", "analyst123");
