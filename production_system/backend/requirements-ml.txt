@@ -1,0 +1,9 @@
+# Optional heavyweight model runtime dependencies
+# Install only in GPU-enabled environments.
+ultralytics==8.2.66
+transformers==4.42.4
+torch==2.2.0
+torchvision==0.17.0
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git
+scipy==1.12.0
+opencv-python==4.9.0.80

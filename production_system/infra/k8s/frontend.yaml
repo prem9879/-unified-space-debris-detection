@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: debris-ui
+  namespace: debris-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: debris-ui
+  template:
+    metadata:
+      labels:
+        app: debris-ui
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/your-org/debris-ui:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: debris-ui
+  namespace: debris-prod
+spec:
+  selector:
+    app: debris-ui
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: debris-ingress
+  namespace: debris-prod
+spec:
+  rules:
+    - host: debris.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: debris-ui
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: debris-api
+                port:
+                  number: 80
