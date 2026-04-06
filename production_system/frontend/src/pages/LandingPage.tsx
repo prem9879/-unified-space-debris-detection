@@ -16,6 +16,14 @@ interface LandingPageProps {
   onNavigate?: () => void;
 }
 
+type ReadinessState = "pending" | "ready" | "warning" | "down";
+
+type ReadinessItem = {
+  label: string;
+  state: ReadinessState;
+  detail: string;
+};
+
 export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   type ExplorerItem = {
     path: string;
@@ -58,7 +66,17 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [benchBusy, setBenchBusy] = useState<boolean>(false);
   const [liveModelBenchmarks, setLiveModelBenchmarks] = useState<any[]>([]);
   const [orbitalBrief, setOrbitalBrief] = useState<any>(null);
-  const [showLegacyConsole, setShowLegacyConsole] = useState<boolean>(false);
+  const [checksBusy, setChecksBusy] = useState<boolean>(false);
+  const [readiness, setReadiness] = useState<Record<string, ReadinessItem>>({
+    readyz: { label: "Core Service", state: "pending", detail: "Waiting" },
+    benchmark: { label: "Model Benchmark API", state: "pending", detail: "Waiting" },
+    orbital: { label: "Orbital Brief API", state: "pending", detail: "Waiting" },
+    datasetInventory: { label: "Dataset Inventory", state: "pending", detail: "Waiting" },
+    predict: { label: "Live Inference Path", state: "pending", detail: "Waiting for startup check" },
+    predictDataset: { label: "Batch Inference Path", state: "pending", detail: "Waiting for startup check" },
+    predictFile: { label: "Explorer Inference Path", state: "pending", detail: "Waiting for startup check" },
+    nasa: { label: "NASA Loader Path", state: "pending", detail: "Waiting for startup check" },
+  });
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -193,16 +211,48 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
           ? "Legacy mission console is ready."
           : "Legacy mission console responded but is not ready."
       );
+      setReadiness((prev) => ({
+        ...prev,
+        readyz: {
+          ...prev.readyz,
+          state: ready?.status === "ready" ? "ready" : "warning",
+          detail: ready?.status === "ready" ? "Healthy" : "Unexpected ready status",
+        },
+      }));
     } catch (error) {
       setLegacyReady(`Legacy console unavailable: ${error instanceof Error ? error.message : "unknown error"}`);
+      setReadiness((prev) => ({
+        ...prev,
+        readyz: {
+          ...prev.readyz,
+          state: "down",
+          detail: error instanceof Error ? error.message : "Unavailable",
+        },
+      }));
     }
 
     try {
       setBenchBusy(true);
       const benchmark = await legacyModelBenchmark(legacyApiKey);
       setLiveModelBenchmarks(benchmark.models ?? []);
+      setReadiness((prev) => ({
+        ...prev,
+        benchmark: {
+          ...prev.benchmark,
+          state: "ready",
+          detail: `${benchmark.models?.length ?? 0} models available`,
+        },
+      }));
     } catch {
       setLiveModelBenchmarks([]);
+      setReadiness((prev) => ({
+        ...prev,
+        benchmark: {
+          ...prev.benchmark,
+          state: "down",
+          detail: "Model benchmark endpoint unavailable",
+        },
+      }));
     } finally {
       setBenchBusy(false);
     }
@@ -210,13 +260,103 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     try {
       const brief = await legacyOrbitalBrief(legacyApiKey);
       setOrbitalBrief(brief);
+      setReadiness((prev) => ({
+        ...prev,
+        orbital: {
+          ...prev.orbital,
+          state: "ready",
+          detail: `${brief?.alerts?.length ?? 0} alerts loaded`,
+        },
+      }));
     } catch {
       setOrbitalBrief(null);
+      setReadiness((prev) => ({
+        ...prev,
+        orbital: {
+          ...prev.orbital,
+          state: "down",
+          detail: "Orbital brief endpoint unavailable",
+        },
+      }));
     }
   };
 
+  const runStartupChecks = async () => {
+    setChecksBusy(true);
+    setReadiness((prev) => {
+      const next: Record<string, ReadinessItem> = { ...prev };
+      Object.keys(next).forEach((key) => {
+        next[key] = { ...next[key], state: "pending", detail: "Checking..." };
+      });
+      return next;
+    });
+
+    try {
+      const inventory = await legacyDatasetInventory(datasetDir, 1, legacyApiKey);
+      setReadiness((prev) => ({
+        ...prev,
+        datasetInventory: {
+          ...prev.datasetInventory,
+          state: "ready",
+          detail: `${inventory.count ?? 0} files discoverable`,
+        },
+        predictFile: {
+          ...prev.predictFile,
+          state: "ready",
+          detail: "Explorer file scan and single-file path available",
+        },
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Dataset inventory failed";
+      setReadiness((prev) => ({
+        ...prev,
+        datasetInventory: {
+          ...prev.datasetInventory,
+          state: "down",
+          detail: message,
+        },
+        predictFile: {
+          ...prev.predictFile,
+          state: "down",
+          detail: "Explorer path blocked by inventory failure",
+        },
+      }));
+    }
+
+    setReadiness((prev) => ({
+      ...prev,
+      predict: {
+        ...prev.predict,
+        state: prev.readyz.state === "ready" ? "ready" : "warning",
+        detail: prev.readyz.state === "ready"
+          ? "Ready once an optical/radar image is provided"
+          : "Core service not ready",
+      },
+      predictDataset: {
+        ...prev.predictDataset,
+        state: prev.datasetInventory.state === "ready" && prev.readyz.state === "ready" ? "ready" : "warning",
+        detail: prev.datasetInventory.state === "ready"
+          ? "Dataset folder can be processed"
+          : "Provide a valid dataset folder path",
+      },
+      nasa: {
+        ...prev.nasa,
+        state: prev.readyz.state === "ready" ? "ready" : "warning",
+        detail: prev.readyz.state === "ready"
+          ? "Loader endpoint reachable"
+          : "Core service unavailable",
+      },
+    }));
+
+    setChecksBusy(false);
+  };
+
   useEffect(() => {
-    void refreshLiveData();
+    const boot = async () => {
+      await refreshLiveData();
+      await runStartupChecks();
+    };
+    void boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -521,7 +661,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </div>
 
                 <div className="rounded-xl bg-slate-900/50 border border-slate-700/50 p-4 space-y-3">
-                  <p className="text-xs uppercase tracking-widest text-slate-400">Mission Console Bridge</p>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Combined Mission Workspace</p>
                   <p className="text-sm text-slate-300">{legacyReady}</p>
                   <div className="flex flex-col md:flex-row gap-3">
                     <input
@@ -537,14 +677,25 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     >
                       Refresh Live Data
                     </button>
-                    <a
-                      href="http://127.0.0.1:7860"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold text-center"
+                    <button
+                      onClick={() => void runStartupChecks()}
+                      className="px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-semibold"
                     >
-                      Open Full Legacy Console
-                    </a>
+                      {checksBusy ? "Checking..." : "Run Startup Checks"}
+                    </button>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2">
+                    {Object.entries(readiness).map(([key, item]) => (
+                      <div key={key} className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs uppercase tracking-wider text-slate-300">{item.label}</p>
+                          <span className={`text-xs font-bold ${item.state === "ready" ? "text-green-400" : item.state === "warning" ? "text-yellow-400" : item.state === "down" ? "text-red-400" : "text-slate-400"}`}>
+                            {item.state.toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">{item.detail}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1232,22 +1383,21 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         >
           <div className="mx-auto max-w-7xl space-y-6">
             <h2 className="text-3xl lg:text-4xl font-black text-white">Research Pack and Export Console</h2>
-            <p className="text-slate-300">Export evidence, inspect full plots, reliability diagrams, and mission tabs in the full legacy console.</p>
-            <div className="flex flex-wrap gap-3">
-              <a href="http://127.0.0.1:7860" target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-semibold">Open Full Console</a>
-              <button onClick={() => setShowLegacyConsole((value) => !value)} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold">
-                {showLegacyConsole ? "Hide Embedded Console" : "Show Embedded Console"}
-              </button>
-            </div>
-            {showLegacyConsole && (
-              <div className="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/80">
-                <iframe
-                  src="http://127.0.0.1:7860"
-                  title="Legacy Mission Console"
-                  className="w-full h-[900px]"
-                />
+            <p className="text-slate-300">All export and research controls are now intended to run from this unified page. Use the readiness checklist above to confirm each feature path before operations.</p>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Run Artifacts</p>
+                <p className="text-sm text-slate-300 mt-2">Prediction outputs, batch summaries, and benchmark payloads are generated from the same unified inference paths.</p>
               </div>
-            )}
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Reference Sources</p>
+                <p className="text-sm text-slate-300 mt-2">NASA ODPO, CelesTrak, and catalog links remain available through the integrated loader and mission deck sections.</p>
+              </div>
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Operational Note</p>
+                <p className="text-sm text-slate-300 mt-2">No separate console handoff required. Keep operations in this combined interface for end-to-end flow.</p>
+              </div>
+            </div>
           </div>
         </motion.div>
 
