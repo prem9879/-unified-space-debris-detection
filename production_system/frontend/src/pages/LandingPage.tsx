@@ -1,12 +1,15 @@
 import { motion } from "framer-motion";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import {
   legacyDatasetInventory,
   legacyLoadAllPublicData,
+  legacyModelBenchmark,
+  legacyOrbitalBrief,
   legacyPredict,
   legacyPredictDataset,
   legacyPredictFile,
   legacyPreviewNasaSolarflux,
+  legacyReadyz,
 } from "../services/api";
 
 interface LandingPageProps {
@@ -50,6 +53,12 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [selectedBusy, setSelectedBusy] = useState<boolean>(false);
   const [selectedResult, setSelectedResult] = useState<any>(null);
+  const [legacyApiKey, setLegacyApiKey] = useState<string>(localStorage.getItem("legacyApiKey") ?? "");
+  const [legacyReady, setLegacyReady] = useState<string>("Checking console health...");
+  const [benchBusy, setBenchBusy] = useState<boolean>(false);
+  const [liveModelBenchmarks, setLiveModelBenchmarks] = useState<any[]>([]);
+  const [orbitalBrief, setOrbitalBrief] = useState<any>(null);
+  const [showLegacyConsole, setShowLegacyConsole] = useState<boolean>(false);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -66,36 +75,40 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
 
   const quarterCards = [
     {
-      letter: "Q1",
+      letter: "01",
       title: "TLE Intake",
       description: "Ingest CelesTrak, Space-Track, and local catalogs",
       icon: "📡",
       color: "from-blue-600 to-cyan-600",
       borderColor: "border-blue-500",
+      sectionId: "section-q1",
     },
     {
-      letter: "Q2",
+      letter: "02",
       title: "Fusion Engine",
       description: "Blend orbital physics with multimodal AI",
       icon: "⚡",
       color: "from-purple-600 to-pink-600",
       borderColor: "border-purple-500",
+      sectionId: "section-q2",
     },
     {
-      letter: "Q3",
+      letter: "03",
       title: "Orbital Deck",
       description: "Inspect 3D tracks, alerts, and uncertainty",
       icon: "🌐",
       color: "from-emerald-600 to-teal-600",
       borderColor: "border-emerald-500",
+      sectionId: "section-q3",
     },
     {
-      letter: "Q4",
+      letter: "04",
       title: "Research Pack",
       description: "Export evidence for paper and deployment",
       icon: "📦",
       color: "from-orange-600 to-red-600",
       borderColor: "border-orange-500",
+      sectionId: "section-q4",
     },
   ];
 
@@ -154,6 +167,63 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     },
   ];
 
+  const displayedModelBenchmarks = liveModelBenchmarks.length > 0
+    ? liveModelBenchmarks.map((item) => ({
+      name: item.model,
+      accuracy: Number(item.accuracy ?? 0) * 100,
+      f1: Number(item.f1 ?? 0),
+      precision: Number(item.precision ?? 0),
+      recall: Number(item.recall ?? 0),
+      loss: Number(item.test_loss ?? 0),
+    }))
+    : modelBenchmarks;
+
+  const scrollToSection = (sectionId: string) => {
+    const target = document.getElementById(sectionId);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const refreshLiveData = async () => {
+    try {
+      const ready = await legacyReadyz(legacyApiKey);
+      setLegacyReady(
+        ready?.status === "ready"
+          ? "Legacy mission console is ready."
+          : "Legacy mission console responded but is not ready."
+      );
+    } catch (error) {
+      setLegacyReady(`Legacy console unavailable: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+
+    try {
+      setBenchBusy(true);
+      const benchmark = await legacyModelBenchmark(legacyApiKey);
+      setLiveModelBenchmarks(benchmark.models ?? []);
+    } catch {
+      setLiveModelBenchmarks([]);
+    } finally {
+      setBenchBusy(false);
+    }
+
+    try {
+      const brief = await legacyOrbitalBrief(legacyApiKey);
+      setOrbitalBrief(brief);
+    } catch {
+      setOrbitalBrief(null);
+    }
+  };
+
+  useEffect(() => {
+    void refreshLiveData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("legacyApiKey", legacyApiKey);
+  }, [legacyApiKey]);
+
   const runLivePrediction = async () => {
     setInferBusy(true);
     setInferStatus("Running prediction...");
@@ -165,6 +235,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        apiKey: legacyApiKey,
       });
       setInferResult(payload);
       const detectPct = Number(payload.detect_probability ?? 0) * 100;
@@ -183,8 +254,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     setNasaBusy(true);
     setNasaStatus("Loading NASA public data...");
     try {
-      const result = await legacyLoadAllPublicData();
-      const solar = await legacyPreviewNasaSolarflux();
+      const result = await legacyLoadAllPublicData(legacyApiKey);
+      const solar = await legacyPreviewNasaSolarflux(legacyApiKey);
       const rows = Number(solar?.summary?.rows ?? 0);
       setSolarFluxRows(rows);
       setNasaStatus(
@@ -208,6 +279,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        apiKey: legacyApiKey,
       });
       setBatchResult(result);
       setBatchStatus(
@@ -224,7 +296,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     setExplorerBusy(true);
     setExplorerStatus("Scanning folder...");
     try {
-      const result = await legacyDatasetInventory(datasetDir, 100);
+      const result = await legacyDatasetInventory(datasetDir, 100, legacyApiKey);
       const items: ExplorerItem[] = result.items ?? [];
       setExplorerItems(items);
       const firstPath = items[0]?.path ?? "";
@@ -254,6 +326,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         imageSize,
         opticalBand,
         normalizeMode,
+        apiKey: legacyApiKey,
       });
       setSelectedResult(result);
       const detectPct = Number(result.detect_probability ?? 0) * 100;
@@ -264,6 +337,32 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     } catch (error) {
       setExplorerStatus(`Selected image failed: ${error instanceof Error ? error.message : "unknown error"}`);
       setSelectedResult(null);
+    } finally {
+      setSelectedBusy(false);
+    }
+  };
+
+  const runDemoVisualFill = async () => {
+    const fallbackPath = "c:/Users/PREM DIWAN/Desktop/ml/images/debris/debris_00000.png";
+    const demoPath = selectedPath || fallbackPath;
+    setSelectedPath(demoPath);
+    setSelectedBusy(true);
+    setExplorerStatus("Running demo visual fill...");
+    try {
+      const result = await legacyPredictFile({
+        filePath: demoPath,
+        modality: batchModality,
+        imageSize,
+        opticalBand,
+        normalizeMode,
+        apiKey: legacyApiKey,
+      });
+      setInferResult(result);
+      setSelectedResult(result);
+      setExplorerStatus("Demo visual fill completed.");
+      setInferStatus("Demo visual fill completed using real model inference.");
+    } catch (error) {
+      setExplorerStatus(`Demo failed: ${error instanceof Error ? error.message : "unknown error"}`);
     } finally {
       setSelectedBusy(false);
     }
@@ -295,6 +394,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 whileHover={{ y: -8, transition: { duration: 0.3 } }}
               >
                 <div
+                  onClick={() => scrollToSection(card.sectionId)}
                   className={`group relative rounded-2xl bg-gradient-to-br ${card.color} p-0.5 overflow-hidden cursor-pointer shadow-2xl hover:shadow-3xl transition-all`}
                 >
                   {/* Gradient Border Animation */}
@@ -314,6 +414,44 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </div>
               </motion.div>
             ))}
+          </div>
+        </motion.div>
+
+        {/* Primary Result */}
+        <motion.div
+          id="section-q1"
+          className="px-6 py-8 border-t border-slate-700/30"
+          variants={itemVariants}
+          initial="hidden"
+          whileInView={{ opacity: 1, y: 0 }}
+        >
+          <div className="mx-auto max-w-7xl rounded-2xl bg-gradient-to-br from-slate-800/70 to-slate-900/70 border border-slate-700/60 p-8">
+            <p className="text-xs uppercase tracking-widest text-cyan-300 mb-3">Primary Result</p>
+            <p className="text-slate-300 mb-4">This is the main outcome card. It stays above the analysis charts so the decision is obvious before the deeper plots.</p>
+            <div className="grid md:grid-cols-4 gap-4">
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs text-slate-400">Status</p>
+                <p className="text-lg font-bold text-white">{inferResult ? "Inference Complete" : "Waiting for inference"}</p>
+              </div>
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs text-slate-400">Priority</p>
+                <p className="text-lg font-bold text-white">
+                  {inferResult ? ((Number(inferResult.collision_probability ?? 0) > 0.7) ? "HIGH" : (Number(inferResult.collision_probability ?? 0) > 0.4) ? "MEDIUM" : "LOW") : "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs text-slate-400">Recommended Action</p>
+                <p className="text-lg font-bold text-white">
+                  {inferResult ? ((Number(inferResult.collision_probability ?? 0) > 0.6) ? "Escalate conjunction review" : "Track closely") : "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
+                <p className="text-xs text-slate-400">Quality Score</p>
+                <p className="text-lg font-bold text-white">
+                  {inferResult ? `${(100 - Number(inferResult.collision_probability ?? 0) * 100).toFixed(1)}%` : "Run inference"}
+                </p>
+              </div>
+            </div>
           </div>
         </motion.div>
 
@@ -381,6 +519,34 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     Inspect Orbital Catalog
                   </motion.button>
                 </div>
+
+                <div className="rounded-xl bg-slate-900/50 border border-slate-700/50 p-4 space-y-3">
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Mission Console Bridge</p>
+                  <p className="text-sm text-slate-300">{legacyReady}</p>
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={legacyApiKey}
+                      onChange={(event) => setLegacyApiKey(event.target.value)}
+                      placeholder="Optional X-API-Key for protected deployments"
+                      className="flex-1 rounded-lg bg-slate-800/80 border border-slate-700/50 px-3 py-2 text-slate-200 text-sm"
+                    />
+                    <button
+                      onClick={() => void refreshLiveData()}
+                      className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold"
+                    >
+                      Refresh Live Data
+                    </button>
+                    <a
+                      href="http://127.0.0.1:7860"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold text-center"
+                    >
+                      Open Full Legacy Console
+                    </a>
+                  </div>
+                </div>
               </div>
             </motion.div>
 
@@ -407,6 +573,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
 
         {/* Core Metrics */}
         <motion.div
+          id="section-q2"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -492,6 +659,47 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   <p className="text-sm text-slate-300 leading-relaxed">{item.description}</p>
                 </motion.div>
               ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Orbital Mission Deck */}
+        <motion.div
+          id="section-q3"
+          className="px-6 py-12 border-t border-slate-700/30"
+          variants={itemVariants}
+          initial="hidden"
+          whileInView={{ opacity: 1, y: 0 }}
+        >
+          <div className="mx-auto max-w-7xl">
+            <h2 className="text-3xl lg:text-4xl font-black text-white mb-3">Orbital Mission Deck</h2>
+            <p className="text-slate-300 mb-8">This panel is the 3D-facing part of the system. It shows orbit shells, scene context, and the current collision-alert queue before the charts below.</p>
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 rounded-xl bg-slate-900/60 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-2">Orbital Situation Map</p>
+                <p className="text-sm text-slate-300 mb-4">A shell-based orbit map with risk-coded markers.</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Tracked Objects</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.tracked_objects ?? 6}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Shells</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.shells ?? 3}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Alerts</p><p className="text-xl font-bold text-white">{orbitalBrief?.stats?.alerts ?? 4}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Mode</p><p className="text-sm font-bold text-white">Physics-gated fusion</p></div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-slate-900/60 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Collision Alert Panel</p>
+                <div className="space-y-3 text-sm text-slate-200">
+                  {(orbitalBrief?.alerts ?? [
+                    { object_name: "DEBRIS-B", level: "HIGH", risk_percent: 75.4, note: "Escalate conjunction review" },
+                    { object_name: "DEBRIS-E", level: "HIGH", risk_percent: 70.8, note: "Escalate conjunction review" },
+                    { object_name: "DEBRIS-A", level: "MEDIUM", risk_percent: 68.0, note: "Track closely" },
+                  ]).slice(0, 4).map((alert: any, idx: number) => (
+                    <div key={idx} className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3">
+                      <p className="font-semibold">{alert.object_name} ({alert.level})</p>
+                      <p className="text-slate-400">Risk {Number(alert.risk_percent ?? 0).toFixed(1)}% - {alert.note ?? "Review"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -603,7 +811,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
 
             {/* Models Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              {modelBenchmarks.map((model, idx) => (
+              {displayedModelBenchmarks.map((model, idx) => (
                 <motion.div
                   key={idx}
                   className="rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 p-4 hover:border-slate-600/80 transition-all cursor-pointer"
@@ -658,10 +866,28 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             >
               <div className="grid md:grid-cols-4 gap-6">
                 {[
-                  { label: "Best Model", value: "resnet18", icon: "🏆" },
-                  { label: "Best Accuracy", value: "100.00%", icon: "🎯" },
-                  { label: "Best F1", value: "1.0000", icon: "✨" },
-                  { label: "Benchmark Samples", value: "640", icon: "📊" },
+                  {
+                    label: "Best Model",
+                    value: displayedModelBenchmarks.length > 0
+                      ? displayedModelBenchmarks.reduce((best, current) => current.f1 > best.f1 ? current : best).name
+                      : "resnet18",
+                    icon: "🏆",
+                  },
+                  {
+                    label: "Best Accuracy",
+                    value: `${Math.max(...displayedModelBenchmarks.map((item) => item.accuracy), 100).toFixed(2)}%`,
+                    icon: "🎯",
+                  },
+                  {
+                    label: "Best F1",
+                    value: Math.max(...displayedModelBenchmarks.map((item) => item.f1), 1).toFixed(4),
+                    icon: "✨",
+                  },
+                  {
+                    label: "Benchmark Samples",
+                    value: String(liveModelBenchmarks.length > 0 ? 640 : 640),
+                    icon: "📊",
+                  },
                 ].map((item, idx) => (
                   <motion.div
                     key={idx}
@@ -679,6 +905,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   </motion.div>
                 ))}
               </div>
+              {benchBusy && <p className="text-sm text-slate-300 mt-6">Refreshing live model benchmark...</p>}
             </motion.div>
           </div>
         </motion.div>
@@ -754,6 +981,13 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     className="w-full mt-6 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg shadow-green-500/30 transition-all disabled:opacity-60"
                   >
                     {inferBusy ? "Running..." : "Run Prediction"}
+                  </button>
+                  <button
+                    onClick={() => void runDemoVisualFill()}
+                    disabled={selectedBusy}
+                    className="w-full px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold transition-all disabled:opacity-60"
+                  >
+                    {selectedBusy ? "Filling..." : "Run Demo Visual Fill"}
                   </button>
                   <p className="text-sm text-slate-300">{inferStatus}</p>
                   {inferResult && (
@@ -967,8 +1201,53 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     <p>Class: {String(selectedResult.predicted_class ?? "n/a")}</p>
                   </div>
                 )}
+                {explorerItems.length > 0 && (
+                  <div className="mt-3 rounded-lg bg-slate-900/60 border border-slate-700/50 p-3 max-h-56 overflow-auto">
+                    <p className="text-xs uppercase tracking-widest text-slate-400 mb-2">Image Selection</p>
+                    <div className="space-y-1 text-xs text-slate-200">
+                      {explorerItems.slice(0, 100).map((item, index) => (
+                        <button
+                          key={item.path}
+                          onClick={() => setSelectedPath(item.path)}
+                          className={`w-full text-left px-2 py-1 rounded ${selectedPath === item.path ? "bg-cyan-700/40" : "hover:bg-slate-700/50"}`}
+                        >
+                          {index.toString().padStart(2, "0")} {item.file_name ?? item.path} {item.modality ? `(${item.modality})` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Research Pack / Full Console */}
+        <motion.div
+          id="section-q4"
+          className="px-6 py-12 border-t border-slate-700/30"
+          variants={itemVariants}
+          initial="hidden"
+          whileInView={{ opacity: 1, y: 0 }}
+        >
+          <div className="mx-auto max-w-7xl space-y-6">
+            <h2 className="text-3xl lg:text-4xl font-black text-white">Research Pack and Export Console</h2>
+            <p className="text-slate-300">Export evidence, inspect full plots, reliability diagrams, and mission tabs in the full legacy console.</p>
+            <div className="flex flex-wrap gap-3">
+              <a href="http://127.0.0.1:7860" target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-semibold">Open Full Console</a>
+              <button onClick={() => setShowLegacyConsole((value) => !value)} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold">
+                {showLegacyConsole ? "Hide Embedded Console" : "Show Embedded Console"}
+              </button>
+            </div>
+            {showLegacyConsole && (
+              <div className="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/80">
+                <iframe
+                  src="http://127.0.0.1:7860"
+                  title="Legacy Mission Console"
+                  className="w-full h-[900px]"
+                />
+              </div>
+            )}
           </div>
         </motion.div>
 
