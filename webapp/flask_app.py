@@ -18,7 +18,7 @@ from typing import TypedDict, cast
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -40,6 +40,7 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 CHECKPOINT = ROOT / "artifacts" / "checkpoints" / "unified_latest.pt"
 REPORT = ROOT / "artifacts" / "eval_report.json"
 DEFAULT_IMAGES_DIR = Path(r"c:\Users\PREM DIWAN\Desktop\ml\images")
+FRONTEND_DIST = ROOT / "production_system" / "frontend" / "dist"
 
 service: UnifiedInferenceService | None = None
 _RATE_LIMIT_STATE: dict[str, object] = {"window_start": 0.0, "buckets": {}}
@@ -274,8 +275,8 @@ def enforce_runtime_security_controls():
     if locked:
         return jsonify({"error": "identity temporarily locked", "locked_until_epoch": until}), 423
 
-    open_paths = {"/", "/healthz", "/readyz", "/options"}
-    if request.path.startswith("/static") or request.path in open_paths:
+    open_paths = {"/", "/healthz", "/readyz", "/options", "/app"}
+    if request.path.startswith("/static") or request.path.startswith("/app") or request.path.startswith("/assets") or request.path in open_paths:
         return None
 
     if bool(cfg["auth_required"]):
@@ -911,7 +912,33 @@ def home():
     )
 
 
+@app.get("/app")
+def mission_unified_app():
+    if not FRONTEND_DIST.exists():
+        return jsonify({"error": f"Frontend bundle not found at {FRONTEND_DIST}. Run: cd production_system/frontend ; npm run build"}), 503
+    return send_from_directory(FRONTEND_DIST, "index.html")
+
+
+@app.get("/app/<path:asset_path>")
+def mission_unified_app_paths(asset_path: str):
+    if not FRONTEND_DIST.exists():
+        return jsonify({"error": f"Frontend bundle not found at {FRONTEND_DIST}. Run: cd production_system/frontend ; npm run build"}), 503
+
+    file_path = FRONTEND_DIST / asset_path
+    if file_path.exists() and file_path.is_file():
+        return send_from_directory(FRONTEND_DIST, asset_path)
+    return send_from_directory(FRONTEND_DIST, "index.html")
+
+
+@app.get("/assets/<path:asset_path>")
+def mission_unified_assets(asset_path: str):
+    if not FRONTEND_DIST.exists():
+        return jsonify({"error": f"Frontend bundle not found at {FRONTEND_DIST}. Run: cd production_system/frontend ; npm run build"}), 503
+    return send_from_directory(FRONTEND_DIST / "assets", asset_path)
+
+
 @app.get("/options")
+@app.get("/legacy-api/options")
 def options():
     layers = []
     if CHECKPOINT.exists():
@@ -946,6 +973,7 @@ def healthz():
 
 
 @app.get("/readyz")
+@app.get("/legacy-api/readyz")
 def readyz():
     # Readiness probe: validates checkpoint and model service initialization.
     checkpoint_exists = CHECKPOINT.exists()
@@ -998,6 +1026,7 @@ def security_policy():
 
 
 @app.get("/dataset_inventory")
+@app.get("/legacy-api/dataset_inventory")
 def dataset_inventory():
     folder = request.args.get("folder", "").strip()
     if not folder:
@@ -1032,6 +1061,7 @@ def preview_image():
 
 
 @app.post("/predict")
+@app.post("/legacy-api/predict")
 @require_role("analyst")
 def predict():
     svc = _load_service()
@@ -1116,6 +1146,7 @@ def predict():
 
 
 @app.post("/predict_dataset")
+@app.post("/legacy-api/predict_dataset")
 @require_role("analyst")
 def predict_dataset():
     svc = _load_service()
@@ -1208,6 +1239,7 @@ def predict_dataset():
 
 
 @app.get("/model_benchmark")
+@app.get("/legacy-api/model_benchmark")
 def model_benchmark():
     summary_path = ROOT / "artifacts" / "image_bench" / "image_bench_summary.json"
     if not summary_path.exists():
@@ -1240,6 +1272,7 @@ def model_benchmark():
 
 
 @app.post("/calibration_report")
+@app.post("/legacy-api/calibration_report")
 @require_role("analyst")
 def calibration_report():
     svc = _load_service()
@@ -1309,6 +1342,7 @@ def calibration_report():
 
 
 @app.post("/predict_file")
+@app.post("/legacy-api/predict_file")
 @require_role("analyst")
 def predict_file():
     svc = _load_service()
@@ -1388,6 +1422,7 @@ def load_nasa_public_data():
 
 
 @app.post("/load_all_public_data")
+@app.post("/legacy-api/load_all_public_data")
 @require_role("admin")
 def load_all_public_data():
     output_root = ROOT / "data"
@@ -1406,6 +1441,7 @@ def load_all_public_data():
 
 
 @app.get("/preview_nasa_solarflux")
+@app.get("/legacy-api/preview_nasa_solarflux")
 def preview_nasa_solarflux():
     csv_path = ROOT / "data" / "processed" / "nasa_odpo" / "solarflux_table_12172025.csv"
     if not csv_path.exists():
@@ -1425,6 +1461,7 @@ def preview_nasa_solarflux():
 
 
 @app.get("/orbital_brief")
+@app.get("/legacy-api/orbital_brief")
 def orbital_brief():
     return jsonify(_build_orbital_brief())
 
