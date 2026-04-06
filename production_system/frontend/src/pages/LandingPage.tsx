@@ -42,6 +42,14 @@ type ReadinessItem = {
 
 type MissionTab = "all" | "overview" | "orbital" | "benchmarks" | "inference" | "data" | "analyze" | "research";
 
+type ToastKind = "success" | "error" | "info";
+
+type ToastState = {
+  kind: ToastKind;
+  title: string;
+  detail: string;
+} | null;
+
 export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   type ExplorerItem = {
     path: string;
@@ -87,6 +95,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [selectedBusy, setSelectedBusy] = useState<boolean>(false);
   const [selectedResult, setSelectedResult] = useState<any>(null);
+  const [compactMode, setCompactMode] = useState<boolean>(false);
+  const [systemBootBusy, setSystemBootBusy] = useState<boolean>(false);
+  const [toast, setToast] = useState<ToastState>(null);
   const [activeTab, setActiveTab] = useState<MissionTab>("all");
   const [calibrationBusy, setCalibrationBusy] = useState<boolean>(false);
   const [calibrationStatus, setCalibrationStatus] = useState<string>("Calibration report not loaded.");
@@ -257,6 +268,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     }
   };
 
+  const showToast = (kind: ToastKind, title: string, detail: string) => {
+    setToast({ kind, title, detail });
+    window.setTimeout(() => setToast(null), 4200);
+  };
+
   const refreshLiveData = async () => {
     try {
       const ready = await legacyReadyz(legacyApiKey);
@@ -413,6 +429,23 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     setChecksBusy(false);
   };
 
+  const startSystem = async () => {
+    setSystemBootBusy(true);
+    setLegacyReady("Starting full system checks...");
+    try {
+      await refreshLiveData();
+      await runStartupChecks();
+      setLegacyReady("System checks complete. You can now load data, run inference, and review risk.");
+      showToast("success", "System started", "Step 1: Load Data, Step 2: Run Inference, Step 3: Review Risk in Analyze.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown startup issue";
+      setLegacyReady(`Startup failed: ${message}`);
+      showToast("error", "System start failed", "Check API key and folder path, then click Start System again.");
+    } finally {
+      setSystemBootBusy(false);
+    }
+  };
+
   useEffect(() => {
     const boot = async () => {
       await refreshLiveData();
@@ -456,8 +489,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setInferStatus(
         `Prediction complete. Detect ${detectPct.toFixed(2)}% | Collision ${collisionPct.toFixed(2)}% | Class ${payload.predicted_class ?? "n/a"}`
       );
+      showToast("success", "Inference complete", "Review Explainability in Analyze, or run batch for broader risk coverage.");
     } catch (error) {
       setInferStatus(`Prediction failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      showToast("error", "Inference failed", "Upload at least one image and verify core service health in Startup Checks.");
     } finally {
       setInferBusy(false);
     }
@@ -474,8 +509,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setNasaStatus(
         `Loaded. Gallery count: ${result.gallery_count ?? 0}. Solar flux rows: ${rows}.`
       );
+      showToast("success", "Data load complete", "Now run Dataset Batch or Explore Files for sample-level validation.");
     } catch (error) {
       setNasaStatus(`NASA load failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      showToast("error", "NASA data load failed", "Check admin key permissions and try Load Everything again.");
     } finally {
       setNasaBusy(false);
     }
@@ -511,8 +548,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setBatchStatus(
         `Batch complete. Processed ${result.processed ?? 0}/${result.num_images ?? 0} images. Avg detect ${(Number(result.avg_detect_probability ?? 0) * 100).toFixed(2)}%.`
       );
+      showToast("success", "Batch complete", "Open Analyze to inspect risk surface and visual grid.");
     } catch (error) {
       setBatchStatus(`Batch failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      showToast("error", "Batch failed", "Confirm dataset path exists and contains image files, then retry.");
     } finally {
       setBatchBusy(false);
     }
@@ -586,6 +625,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         `Uploaded dataset complete. Processed ${samples.length}/${uploadedDatasetFiles.length}. Avg detect ${(detectMean * 100).toFixed(2)}%.`
       );
       setBatchStatus(`Using uploaded dataset results (${samples.length} images).`);
+      showToast("success", "Uploaded batch complete", "Use Analyze for confidence, collision, and uncertainty review.");
       setReadiness((prev) => ({
         ...prev,
         predictDataset: {
@@ -596,6 +636,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       }));
     } catch (error) {
       setUploadBatchStatus(`Uploaded dataset run failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      showToast("error", "Uploaded batch failed", "Select valid image files and ensure core service is healthy.");
     } finally {
       setUploadBatchBusy(false);
     }
@@ -619,10 +660,12 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         },
       }));
       setExplorerStatus(`Found ${result.count ?? items.length} files.`);
+      showToast("success", "Folder scanned", "Select an image and click Run Selected Image to populate insights.");
     } catch (error) {
       setExplorerStatus(`Scan failed: ${error instanceof Error ? error.message : "unknown error"}`);
       setExplorerItems([]);
       setSelectedPath("");
+      showToast("error", "Folder scan failed", "Update dataset path and run startup checks to validate access.");
     } finally {
       setExplorerBusy(false);
     }
@@ -655,9 +698,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setExplorerStatus(
         `Selected inference complete. Detect ${detectPct.toFixed(2)}%, Collision ${collisionPct.toFixed(2)}%.`
       );
+      showToast("success", "Selected image complete", "Check Research Insight Panel for latest mission summary.");
     } catch (error) {
       setExplorerStatus(`Selected image failed: ${error instanceof Error ? error.message : "unknown error"}`);
       setSelectedResult(null);
+      showToast("error", "Selected image failed", "Rescan files and verify the selected path exists.");
     } finally {
       setSelectedBusy(false);
     }
@@ -685,8 +730,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setSelectedResult(result);
       setExplorerStatus("Demo visual fill completed.");
       setInferStatus("Demo visual fill completed using real model inference.");
+      showToast("success", "Demo visual fill complete", "You can continue with batch run for dataset-wide risk context.");
     } catch (error) {
       setExplorerStatus(`Demo failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      showToast("error", "Demo visual fill failed", "Try Run Selected Image with a known file from explorer.");
     } finally {
       setSelectedBusy(false);
     }
@@ -710,9 +757,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setCalibrationReport(report);
       const ece = Number(report?.metrics?.ece ?? 0);
       setCalibrationStatus(`Calibration loaded. ECE=${ece.toFixed(4)}.`);
+      showToast("success", "Calibration loaded", "Use reliability chart to compare confidence vs observed accuracy.");
     } catch (error) {
       setCalibrationStatus(`Calibration load failed: ${error instanceof Error ? error.message : "unknown error"}`);
       setCalibrationReport(null);
+      showToast("error", "Calibration failed", "Run batch first or increase sample count, then retry calibration.");
     } finally {
       setCalibrationBusy(false);
     }
@@ -829,6 +878,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     return { border: "border-amber-500/40", chip: "bg-amber-500/20 text-amber-200" };
   };
 
+  const sectionPadding = compactMode ? "py-8" : "py-12";
+  const compactText = compactMode ? "text-sm" : "text-base";
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_18%_12%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_84%_18%,rgba(245,158,11,0.12),transparent_28%),linear-gradient(135deg,#020617,#0b1730_42%,#071026)] scroll-smooth">
       {/* Animated Background Orbs */}
@@ -840,10 +892,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10">
+      <div className={`relative z-10 ${compactMode ? "[&_*]:transition-all" : ""}`}>
         {/* Quarter Cards Row */}
         <motion.div
-          className="px-6 pt-10 pb-6"
+          className={`px-6 ${compactMode ? "pt-6 pb-4" : "pt-10 pb-6"}`}
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -900,10 +952,32 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
           </div>
         </motion.div>
 
+        <motion.div className="px-6 pb-4" variants={itemVariants} initial="hidden" animate="visible">
+          <div className="mx-auto max-w-7xl rounded-2xl border border-slate-700/60 bg-slate-900/65 backdrop-blur-xl p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-widest text-cyan-300">Quick Mission Path</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => activateTab("data", "section-data")} className="px-3 py-1.5 rounded-lg bg-slate-800/90 text-slate-200 text-xs font-semibold hover:bg-slate-700/90">Step 1: Load Data</button>
+                <button onClick={() => activateTab("inference", "section-inference")} className="px-3 py-1.5 rounded-lg bg-slate-800/90 text-slate-200 text-xs font-semibold hover:bg-slate-700/90">Step 2: Run Inference</button>
+                <button onClick={() => activateTab("analyze", "section-analyze")} className="px-3 py-1.5 rounded-lg bg-slate-800/90 text-slate-200 text-xs font-semibold hover:bg-slate-700/90">Step 3: Review Risk</button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {toast && (
+          <div className="fixed right-5 top-20 z-50 max-w-sm">
+            <div className={`rounded-xl border px-4 py-3 shadow-xl backdrop-blur-xl ${toast.kind === "success" ? "bg-emerald-900/85 border-emerald-400/35" : toast.kind === "error" ? "bg-red-900/85 border-red-400/35" : "bg-blue-900/85 border-blue-400/35"}`}>
+              <p className="text-sm font-bold text-white">{toast.title}</p>
+              <p className="text-xs text-slate-100 mt-1">{toast.detail}</p>
+            </div>
+          </div>
+        )}
+
         {/* Primary Result */}
         {isTabVisible("overview") && <motion.div
           id="section-q1"
-          className="px-6 py-8 border-t border-slate-700/30"
+          className={`px-6 ${compactMode ? "py-6" : "py-8"} border-t border-slate-700/30`}
           variants={itemVariants}
           initial="hidden"
           whileInView={{ opacity: 1, y: 0 }}
@@ -914,7 +988,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             <div className="grid md:grid-cols-4 gap-4">
               <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
                 <p className="text-xs text-slate-400">Status</p>
-                <p className="text-lg font-bold text-white">{inferResult ? "Inference Complete" : "Waiting for inference"}</p>
+                <p className="text-lg font-bold text-white">{inferResult ? "Inference Complete" : "No result yet. Click Start System, then Run Prediction."}</p>
               </div>
               <div className="rounded-lg bg-slate-900/70 border border-slate-700/50 p-4">
                 <p className="text-xs text-slate-400">Priority</p>
@@ -940,7 +1014,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
 
         {/* Main Content Section */}
         {isTabVisible("overview") && <motion.div
-          className="px-6 py-12"
+          className={`px-6 ${sectionPadding}`}
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -978,7 +1052,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </h1>
 
                 {/* Description */}
-                <p className="text-lg text-slate-300 leading-relaxed max-w-2xl">
+                <p className={`${compactText} text-slate-300 leading-relaxed max-w-2xl`}>
                   Real-time TLE intake, orbital feature engineering, multimodal AI, and collision-risk scoring in one mission console. The system is built to feel like a flight-deck tool, not a demo.
                 </p>
 
@@ -1014,6 +1088,18 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                       placeholder="Optional X-API-Key for protected deployments"
                       className="flex-1 rounded-lg bg-slate-800/80 border border-slate-700/50 px-3 py-2 text-slate-200 text-sm"
                     />
+                    <button
+                      onClick={() => void startSystem()}
+                      className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-semibold"
+                    >
+                      {systemBootBusy ? "Starting..." : "Start System"}
+                    </button>
+                    <button
+                      onClick={() => setCompactMode((prev) => !prev)}
+                      className="px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-white text-sm font-semibold"
+                    >
+                      {compactMode ? "Disable Compact" : "Enable Compact"}
+                    </button>
                     <button
                       onClick={() => void refreshLiveData()}
                       className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold"
@@ -1454,7 +1540,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         {/* Live Inference Section */}
         {isTabVisible("inference") && <motion.div
           id="section-inference"
-          className="px-6 py-12 border-t border-slate-700/30"
+          className={`px-6 ${sectionPadding} border-t border-slate-700/30`}
           variants={itemVariants}
           initial="hidden"
           whileInView={{ opacity: 1, y: 0 }}
@@ -1574,6 +1660,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     <p className="text-xs text-yellow-300">Live inference disabled while core service is down.</p>
                   )}
                   <p className="text-sm text-slate-300">{inferStatus}</p>
+                  {!inferResult && (
+                    <div className="rounded-lg bg-slate-900/50 border border-dashed border-slate-600/60 p-4 text-xs text-slate-300">
+                      No result yet. Click <span className="font-semibold text-cyan-300">Run Prediction</span> after choosing at least one optical or radar image.
+                    </div>
+                  )}
                   {inferResult && (
                     <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 p-4 text-sm text-slate-200 space-y-1">
                       <p>Detect Probability: {(Number(inferResult.detect_probability ?? 0) * 100).toFixed(2)}%</p>
@@ -1637,7 +1728,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         {/* Dataset Section */}
         {isTabVisible("data") && <motion.div
           id="section-data"
-          className="px-6 py-12 border-t border-slate-700/30"
+          className={`px-6 ${sectionPadding} border-t border-slate-700/30`}
           variants={itemVariants}
           initial="hidden"
           whileInView={{ opacity: 1, y: 0 }}
@@ -1815,6 +1906,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   <p className="text-xs text-yellow-300 mt-2">Run Selected Image is disabled while core service is down.</p>
                 )}
                 <p className="text-xs text-slate-300 mt-3">{explorerStatus}</p>
+                {explorerItems.length === 0 && (
+                  <p className="text-xs text-slate-400 mt-2">No files listed yet. Click <span className="text-cyan-300 font-semibold">Explore Files</span> to load folder contents.</p>
+                )}
                 {explorerItems.length > 0 && (
                   <select
                     value={selectedPath}
@@ -1879,7 +1973,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         {/* Analyze Section */}
         {isTabVisible("analyze") && <motion.div
           id="section-analyze"
-          className="px-6 py-12 border-t border-slate-700/30"
+          className={`px-6 ${sectionPadding} border-t border-slate-700/30`}
           variants={itemVariants}
           initial="hidden"
           whileInView={{ opacity: 1, y: 0 }}
@@ -1891,7 +1985,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
             <div className="grid lg:grid-cols-2 gap-6">
               <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
                 <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Collision Risk Surface</p>
-                <Line data={riskSurfaceData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+                {batchSamples.length > 0
+                  ? <Line data={riskSurfaceData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+                  : <p className="text-sm text-slate-400">No risk data yet. Click <span className="text-cyan-300 font-semibold">Run Batch</span> or <span className="text-cyan-300 font-semibold">Load All Images + Run</span> in Data Ops.</p>}
               </div>
               <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
                 <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Model Leaderboard</p>
@@ -1913,13 +2009,13 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               <p className="text-sm text-slate-300">{calibrationStatus}</p>
               {reliabilityBins.length > 0
                 ? <Line data={reliabilityData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
-                : <p className="text-sm text-slate-400">Calibration report not loaded.</p>}
+                : <p className="text-sm text-slate-400">No calibration yet. Click <span className="text-cyan-300 font-semibold">Load Calibration Report</span> after at least one dataset run.</p>}
             </div>
 
             <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
               <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Batch Visual Grid</p>
               {batchSamples.length === 0
-                ? <p className="text-sm text-slate-400">Run dataset batch to populate visual grid.</p>
+                ? <p className="text-sm text-slate-400">No images visualized yet. Run <span className="text-cyan-300 font-semibold">Run Batch</span> or <span className="text-cyan-300 font-semibold">Load All Images + Run</span> to populate this panel.</p>
                 : <div className="grid md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {batchSamples.slice(0, 12).map((sample: any) => (
                     <div key={sample.file_name} className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-3 text-xs text-slate-200 space-y-2">
