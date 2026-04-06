@@ -806,25 +806,33 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     };
   };
 
+  const alertTone = (alert: any): { border: string; chip: string } => {
+    const level = String(alert?.risk_band ?? alert?.level ?? "MEDIUM").toUpperCase();
+    if (level === "HIGH") return { border: "border-red-500/40", chip: "bg-red-500/20 text-red-200" };
+    if (level === "LOW") return { border: "border-cyan-500/40", chip: "bg-cyan-500/20 text-cyan-200" };
+    return { border: "border-amber-500/40", chip: "bg-amber-500/20 text-amber-200" };
+  };
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 scroll-smooth">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_18%_12%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_84%_18%,rgba(245,158,11,0.12),transparent_28%),linear-gradient(135deg,#020617,#0b1730_42%,#071026)] scroll-smooth">
       {/* Animated Background Orbs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-3xl"></div>
         <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:72px_72px]"></div>
       </div>
 
       {/* Main Content */}
       <div className="relative z-10">
         {/* Quarter Cards Row */}
         <motion.div
-          className="px-6 pt-12 pb-8"
+          className="px-6 pt-10 pb-6"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {quarterCards.map((card, idx) => (
               <motion.div
                 key={idx}
@@ -833,20 +841,20 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               >
                 <div
                   onClick={() => activateTab(card.tab, card.sectionId)}
-                  className={`group relative rounded-2xl bg-gradient-to-br ${card.color} p-0.5 overflow-hidden cursor-pointer shadow-2xl hover:shadow-3xl transition-all`}
+                  className={`group relative rounded-2xl bg-gradient-to-br ${card.color} p-0.5 overflow-hidden cursor-pointer shadow-[0_12px_30px_rgba(2,6,23,0.5)] hover:shadow-[0_16px_42px_rgba(6,182,212,0.25)] transition-all`}
                 >
                   {/* Gradient Border Animation */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-20 translate-x-[-100%] group-hover:translate-x-[100%] transition-all duration-1000"></div>
 
-                  <div className="relative rounded-2xl bg-slate-900/95 backdrop-blur-xl p-6 h-full">
+                  <div className="relative rounded-2xl bg-slate-900/92 backdrop-blur-xl p-5 h-full border border-white/5">
                     <div className="flex items-start justify-between mb-4">
                       <span className="text-4xl font-black bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
                         {card.letter}
                       </span>
                       <span className="text-3xl">{card.icon}</span>
                     </div>
-                    <h3 className="text-xl font-bold text-white mb-2">{card.title}</h3>
-                    <p className="text-sm text-slate-300 leading-relaxed">{card.description}</p>
+                    <h3 className="text-xl font-black text-white mb-2">{card.title}</h3>
+                    <p className="text-sm text-slate-300 leading-snug">{card.description}</p>
                     <div className="absolute bottom-0 left-0 h-1 w-0 group-hover:w-full bg-gradient-to-r from-transparent via-white to-transparent transition-all duration-500"></div>
                   </div>
                 </div>
@@ -856,8 +864,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
         </motion.div>
 
         {/* Mission Tabs */}
-        <motion.div className="px-6 pb-6" variants={itemVariants} initial="hidden" animate="visible">
-          <div className="mx-auto max-w-7xl rounded-xl bg-slate-900/70 border border-slate-700/50 p-3">
+        <motion.div className="px-6 pb-6 sticky top-3 z-40" variants={itemVariants} initial="hidden" animate="visible">
+          <div className="mx-auto max-w-7xl rounded-2xl bg-slate-900/72 border border-slate-700/60 p-3 backdrop-blur-xl shadow-[0_8px_24px_rgba(2,6,23,0.45)]">
             <div className="flex flex-wrap gap-2">
               {missionTabs.map((tab) => (
                 <button
@@ -865,8 +873,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   onClick={() => activateTab(tab.key, tab.sectionId)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                     activeTab === tab.key
-                      ? "bg-cyan-600 text-white shadow-lg shadow-cyan-700/30"
-                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700/80"
+                      ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-700/30"
+                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 hover:text-white"
                   }`}
                 >
                   {tab.label}
@@ -884,7 +892,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
           initial="hidden"
           whileInView={{ opacity: 1, y: 0 }}
         >
-          <div className="mx-auto max-w-7xl rounded-2xl bg-gradient-to-br from-slate-800/70 to-slate-900/70 border border-slate-700/60 p-8">
+          <div className="mx-auto max-w-7xl rounded-2xl bg-gradient-to-br from-slate-800/75 to-slate-900/75 border border-slate-700/60 p-8 shadow-[0_10px_28px_rgba(2,6,23,0.4)]">
             <p className="text-xs uppercase tracking-widest text-cyan-300 mb-3">Primary Result</p>
             <p className="text-slate-300 mb-4">This is the main outcome card. It stays above the analysis charts so the decision is obvious before the deeper plots.</p>
             <div className="grid md:grid-cols-4 gap-4">
@@ -1200,10 +1208,15 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     { object: "DEBRIS-E", risk_band: "HIGH", risk_score: 0.708, recommended_action: "Escalate conjunction review" },
                     { object: "DEBRIS-A", risk_band: "MEDIUM", risk_score: 0.680, recommended_action: "Track closely" },
                   ]).slice(0, 5).map((alert: any, idx: number) => (
-                    <div key={idx} className="rounded-xl bg-slate-800/70 border border-slate-700/50 p-4">
-                      <p className="font-semibold text-lg leading-tight">
-                        {String(alert.object ?? alert.object_name ?? "OBJECT")} ({String(alert.risk_band ?? alert.level ?? "MEDIUM")})
-                      </p>
+                    <div key={idx} className={`rounded-xl bg-slate-800/70 border ${alertTone(alert).border} p-4`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-lg leading-tight">
+                          {String(alert.object ?? alert.object_name ?? "OBJECT")}
+                        </p>
+                        <span className={`px-2 py-1 rounded-full text-[11px] font-bold tracking-wide ${alertTone(alert).chip}`}>
+                          {String(alert.risk_band ?? alert.level ?? "MEDIUM")}
+                        </span>
+                      </div>
                       <p className="text-slate-300 mt-2">
                         NORAD {String(alert.norad_cat_id ?? "-")} · Risk {(Number(alert.risk_score ?? alert.risk_percent ?? 0) * (Number(alert.risk_score ?? 0) <= 1 ? 100 : 1)).toFixed(1)}% · {String(alert.recommended_action ?? alert.note ?? "Track closely")}
                       </p>
