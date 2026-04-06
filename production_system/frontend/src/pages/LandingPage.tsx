@@ -24,6 +24,8 @@ type ReadinessItem = {
   detail: string;
 };
 
+type MissionTab = "all" | "overview" | "orbital" | "benchmarks" | "inference" | "data" | "research";
+
 export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   type ExplorerItem = {
     path: string;
@@ -61,6 +63,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [selectedBusy, setSelectedBusy] = useState<boolean>(false);
   const [selectedResult, setSelectedResult] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<MissionTab>("all");
   const [legacyApiKey, setLegacyApiKey] = useState<string>(localStorage.getItem("legacyApiKey") ?? "");
   const [legacyReady, setLegacyReady] = useState<string>("Checking console health...");
   const [benchBusy, setBenchBusy] = useState<boolean>(false);
@@ -100,6 +103,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       color: "from-blue-600 to-cyan-600",
       borderColor: "border-blue-500",
       sectionId: "section-q1",
+      tab: "overview" as MissionTab,
     },
     {
       letter: "02",
@@ -109,6 +113,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       color: "from-purple-600 to-pink-600",
       borderColor: "border-purple-500",
       sectionId: "section-q2",
+      tab: "benchmarks" as MissionTab,
     },
     {
       letter: "03",
@@ -118,6 +123,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       color: "from-emerald-600 to-teal-600",
       borderColor: "border-emerald-500",
       sectionId: "section-q3",
+      tab: "orbital" as MissionTab,
     },
     {
       letter: "04",
@@ -127,7 +133,18 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       color: "from-orange-600 to-red-600",
       borderColor: "border-orange-500",
       sectionId: "section-q4",
+      tab: "research" as MissionTab,
     },
+  ];
+
+  const missionTabs: Array<{ key: MissionTab; label: string; sectionId?: string }> = [
+    { key: "all", label: "All" },
+    { key: "overview", label: "Overview", sectionId: "section-q1" },
+    { key: "orbital", label: "Orbital Deck", sectionId: "section-q3" },
+    { key: "benchmarks", label: "Model Stack", sectionId: "section-benchmarks" },
+    { key: "inference", label: "Live Inference", sectionId: "section-inference" },
+    { key: "data", label: "Data Ops", sectionId: "section-data" },
+    { key: "research", label: "Research Pack", sectionId: "section-q4" },
   ];
 
   const modelBenchmarks = [
@@ -200,6 +217,15 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     const target = document.getElementById(sectionId);
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const isTabVisible = (tab: MissionTab): boolean => activeTab === "all" || activeTab === tab;
+
+  const activateTab = (tab: MissionTab, sectionId?: string) => {
+    setActiveTab(tab);
+    if (sectionId) {
+      window.setTimeout(() => scrollToSection(sectionId), 80);
     }
   };
 
@@ -534,7 +560,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 whileHover={{ y: -8, transition: { duration: 0.3 } }}
               >
                 <div
-                  onClick={() => scrollToSection(card.sectionId)}
+                  onClick={() => activateTab(card.tab, card.sectionId)}
                   className={`group relative rounded-2xl bg-gradient-to-br ${card.color} p-0.5 overflow-hidden cursor-pointer shadow-2xl hover:shadow-3xl transition-all`}
                 >
                   {/* Gradient Border Animation */}
@@ -557,8 +583,29 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
           </div>
         </motion.div>
 
+        {/* Mission Tabs */}
+        <motion.div className="px-6 pb-6" variants={itemVariants} initial="hidden" animate="visible">
+          <div className="mx-auto max-w-7xl rounded-xl bg-slate-900/70 border border-slate-700/50 p-3">
+            <div className="flex flex-wrap gap-2">
+              {missionTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => activateTab(tab.key, tab.sectionId)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    activeTab === tab.key
+                      ? "bg-cyan-600 text-white shadow-lg shadow-cyan-700/30"
+                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700/80"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
         {/* Primary Result */}
-        <motion.div
+        {isTabVisible("overview") && <motion.div
           id="section-q1"
           className="px-6 py-8 border-t border-slate-700/30"
           variants={itemVariants}
@@ -593,10 +640,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </div>
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Main Content Section */}
-        <motion.div
+        {isTabVisible("overview") && <motion.div
           className="px-6 py-12"
           variants={containerVariants}
           initial="hidden"
@@ -720,10 +767,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </div>
             </motion.div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Core Metrics */}
-        <motion.div
+        {isTabVisible("overview") && <motion.div
           id="section-q2"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
@@ -750,10 +797,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               ))}
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* System Thesis Section */}
-        <motion.div
+        {isTabVisible("overview") && <motion.div
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -812,10 +859,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               ))}
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Orbital Mission Deck */}
-        <motion.div
+        {isTabVisible("orbital") && <motion.div
           id="section-q3"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
@@ -853,10 +900,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </div>
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Research Pipeline */}
-        <motion.div
+        {isTabVisible("research") && <motion.div
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -935,10 +982,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </div>
             </motion.div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Model Benchmarks */}
-        <motion.div
+        {isTabVisible("benchmarks") && <motion.div
+          id="section-benchmarks"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -1059,10 +1107,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               {benchBusy && <p className="text-sm text-slate-300 mt-6">Refreshing live model benchmark...</p>}
             </motion.div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Live Inference Section */}
-        <motion.div
+        {isTabVisible("inference") && <motion.div
+          id="section-inference"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -1128,18 +1177,21 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   </div>
                   <button
                     onClick={() => void runLivePrediction()}
-                    disabled={inferBusy}
+                    disabled={inferBusy || readiness.predict.state !== "ready"}
                     className="w-full mt-6 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg shadow-green-500/30 transition-all disabled:opacity-60"
                   >
                     {inferBusy ? "Running..." : "Run Prediction"}
                   </button>
                   <button
                     onClick={() => void runDemoVisualFill()}
-                    disabled={selectedBusy}
+                    disabled={selectedBusy || readiness.predictFile.state !== "ready"}
                     className="w-full px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold transition-all disabled:opacity-60"
                   >
                     {selectedBusy ? "Filling..." : "Run Demo Visual Fill"}
                   </button>
+                  {readiness.predict.state !== "ready" && (
+                    <p className="text-xs text-yellow-300">Live inference disabled until readiness is green for Live Inference Path.</p>
+                  )}
                   <p className="text-sm text-slate-300">{inferStatus}</p>
                   {inferResult && (
                     <div className="rounded-lg bg-slate-900/60 border border-slate-700/50 p-4 text-sm text-slate-200 space-y-1">
@@ -1199,10 +1251,11 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </motion.div>
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Dataset Section */}
-        <motion.div
+        {isTabVisible("data") && <motion.div
+          id="section-data"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
           initial="hidden"
@@ -1265,7 +1318,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </p>
                 <button
                   onClick={() => void loadNasaData()}
-                  disabled={nasaBusy}
+                  disabled={nasaBusy || readiness.nasa.state === "down"}
                   className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all disabled:opacity-60"
                 >
                   {nasaBusy ? "Loading..." : "Load Everything"}
@@ -1289,11 +1342,14 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 </p>
                 <button
                   onClick={() => void runDatasetBatch()}
-                  disabled={batchBusy}
+                  disabled={batchBusy || readiness.predictDataset.state !== "ready"}
                   className="w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all disabled:opacity-60"
                 >
                   {batchBusy ? "Running..." : "Run Batch"}
                 </button>
+                {readiness.predictDataset.state !== "ready" && (
+                  <p className="text-xs text-yellow-300 mt-2">Batch disabled until dataset path checks are green.</p>
+                )}
                 <p className="text-xs text-slate-300 mt-3">{batchStatus}</p>
                 {batchResult && (
                   <p className="text-xs text-cyan-300 mt-1">
@@ -1318,19 +1374,22 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <div className="space-y-2">
                   <button
                     onClick={() => void scanExplorer()}
-                    disabled={explorerBusy}
+                    disabled={explorerBusy || readiness.datasetInventory.state !== "ready"}
                     className="w-full px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold transition-all disabled:opacity-60"
                   >
                     {explorerBusy ? "Scanning..." : "Explore Files"}
                   </button>
                   <button
                     onClick={() => void runSelectedImage()}
-                    disabled={selectedBusy || !selectedPath}
+                    disabled={selectedBusy || !selectedPath || readiness.predictFile.state !== "ready"}
                     className="w-full px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all disabled:opacity-60"
                   >
                     {selectedBusy ? "Running..." : "Run Selected Image"}
                   </button>
                 </div>
+                {(readiness.datasetInventory.state !== "ready" || readiness.predictFile.state !== "ready") && (
+                  <p className="text-xs text-yellow-300 mt-2">Explorer actions are locked until readiness checks pass.</p>
+                )}
                 <p className="text-xs text-slate-300 mt-3">{explorerStatus}</p>
                 {explorerItems.length > 0 && (
                   <select
@@ -1371,10 +1430,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </motion.div>
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Research Pack / Full Console */}
-        <motion.div
+        {isTabVisible("research") && <motion.div
           id="section-q4"
           className="px-6 py-12 border-t border-slate-700/30"
           variants={itemVariants}
@@ -1399,7 +1458,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               </div>
             </div>
           </div>
-        </motion.div>
+        </motion.div>}
 
         {/* Footer Stats */}
         <motion.div
