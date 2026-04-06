@@ -71,6 +71,10 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [batchBusy, setBatchBusy] = useState<boolean>(false);
   const [batchStatus, setBatchStatus] = useState<string>("Waiting for dataset run...");
   const [batchResult, setBatchResult] = useState<any>(null);
+  const [uploadedDatasetFiles, setUploadedDatasetFiles] = useState<File[]>([]);
+  const [uploadBatchBusy, setUploadBatchBusy] = useState<boolean>(false);
+  const [uploadBatchStatus, setUploadBatchStatus] = useState<string>("No uploaded dataset run yet.");
+  const [legacyEmbedVisible, setLegacyEmbedVisible] = useState<boolean>(false);
 
   const [explorerBusy, setExplorerBusy] = useState<boolean>(false);
   const [explorerStatus, setExplorerStatus] = useState<string>("Scan the folder to start exploring images.");
@@ -489,6 +493,86 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       setBatchStatus(`Batch failed: ${error instanceof Error ? error.message : "unknown error"}`);
     } finally {
       setBatchBusy(false);
+    }
+  };
+
+  const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error(`Failed to preview ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const runUploadedDatasetBatch = async () => {
+    const capped = uploadedDatasetFiles.slice(0, Math.max(1, maxSamples));
+    if (capped.length === 0) {
+      setUploadBatchStatus("Select dataset images first.");
+      return;
+    }
+
+    setUploadBatchBusy(true);
+    setUploadBatchStatus(`Processing ${capped.length} uploaded image(s)...`);
+
+    try {
+      const samples = await Promise.all(
+        capped.map(async (file) => {
+          const payload = await legacyPredict({
+            opticalFile: batchModality === "radar" ? null : file,
+            radarFile: batchModality === "radar" ? file : null,
+            physics: physicsVector,
+            imageSize,
+            opticalBand,
+            normalizeMode,
+            apiKey: legacyApiKey,
+          });
+          const thumb = await fileToDataUrl(file);
+          return {
+            file: file.name,
+            file_name: file.name,
+            detect_probability: Number(payload.detect_probability ?? 0),
+            collision_probability: Number(payload.collision_probability ?? 0),
+            predicted_class: payload.predicted_class,
+            detect_label: payload?.decision_basis?.predicted_label ?? "uncertain",
+            decision_basis: payload?.decision_basis ?? null,
+            inference_source: payload?.inference_source ?? "legacy_predict",
+            thumb,
+            bbox_overlay_thumb: payload?.evidence_visuals?.bbox_overlay_visual ?? null,
+            heatmap_thumb: payload?.evidence_visuals?.heatmap_visual ?? null,
+          };
+        })
+      );
+
+      const detectMean = samples.reduce((acc, row) => acc + Number(row.detect_probability ?? 0), 0) / samples.length;
+      const collisionMean = samples.reduce((acc, row) => acc + Number(row.collision_probability ?? 0), 0) / samples.length;
+
+      setBatchResult({
+        dataset_dir: "uploaded-from-browser",
+        modality: batchModality,
+        num_images: uploadedDatasetFiles.length,
+        processed: samples.length,
+        avg_detect_probability: detectMean,
+        avg_collision_probability: collisionMean,
+        samples,
+      });
+
+      setUploadBatchStatus(
+        `Uploaded dataset complete. Processed ${samples.length}/${uploadedDatasetFiles.length}. Avg detect ${(detectMean * 100).toFixed(2)}%.`
+      );
+      setBatchStatus(`Using uploaded dataset results (${samples.length} images).`);
+      setReadiness((prev) => ({
+        ...prev,
+        predictDataset: {
+          ...prev.predictDataset,
+          state: "ready",
+          detail: `Uploaded run processed ${samples.length} image(s)`,
+        },
+      }));
+    } catch (error) {
+      setUploadBatchStatus(`Uploaded dataset run failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setUploadBatchBusy(false);
     }
   };
 
@@ -1491,6 +1575,49 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 )}
               </motion.div>
 
+              {/* Upload Dataset (7860-style) */}
+              <motion.div
+                className="rounded-xl bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 p-6"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                whileHover={{ y: -4 }}
+              >
+                <p className="text-4xl mb-3">📤</p>
+                <h3 className="text-lg font-bold text-white mb-3">Upload Dataset Images</h3>
+                <p className="text-sm text-slate-300 mb-4">
+                  Bring images directly from your machine and run full inference in this page, like the old 7860 workflow.
+                </p>
+                <label className="block w-full px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-700/50 text-slate-200 text-sm cursor-pointer hover:bg-slate-700/80 transition-all">
+                  Choose Images
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => setUploadedDatasetFiles(Array.from(event.target.files ?? []))}
+                  />
+                </label>
+                <p className="text-xs text-slate-400 mt-2">{uploadedDatasetFiles.length} file(s) selected</p>
+                <div className="mt-3 space-y-2">
+                  <button
+                    onClick={() => void runUploadedDatasetBatch()}
+                    disabled={uploadBatchBusy || uploadedDatasetFiles.length === 0 || readiness.readyz.state === "down"}
+                    className="w-full px-4 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold transition-all disabled:opacity-60"
+                  >
+                    {uploadBatchBusy ? "Processing..." : "Load All Images + Run"}
+                  </button>
+                  <button
+                    onClick={() => setUploadedDatasetFiles([])}
+                    disabled={uploadBatchBusy || uploadedDatasetFiles.length === 0}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-all disabled:opacity-60"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300 mt-3">{uploadBatchStatus}</p>
+              </motion.div>
+
               {/* Dataset Explorer */}
               <motion.div
                 className="rounded-xl bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 p-6"
@@ -1561,6 +1688,40 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   </div>
                 )}
               </motion.div>
+            </div>
+
+            <div className="mt-8 rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-widest text-slate-400">Legacy 7860 Console</p>
+                  <p className="text-sm text-slate-300 mt-1">Open or embed the full original app at 127.0.0.1:7860 to access every old control exactly as before.</p>
+                </div>
+                <div className="flex gap-2">
+                  <a
+                    href="http://127.0.0.1:7860/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-semibold"
+                  >
+                    Open 7860
+                  </a>
+                  <button
+                    onClick={() => setLegacyEmbedVisible((prev) => !prev)}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold"
+                  >
+                    {legacyEmbedVisible ? "Hide Embed" : "Show Embed"}
+                  </button>
+                </div>
+              </div>
+              {legacyEmbedVisible && (
+                <div className="mt-4 rounded-lg overflow-hidden border border-slate-700/50">
+                  <iframe
+                    src="http://127.0.0.1:7860/"
+                    title="Legacy mission console"
+                    className="w-full h-[720px] bg-slate-950"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </motion.div>}
