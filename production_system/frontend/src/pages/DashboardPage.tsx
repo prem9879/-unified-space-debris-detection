@@ -73,7 +73,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps): ReactElement 
     formData.append("file", file);
     try {
       setUploadProgress(10);
-      const result = await uploadDetection(token, formData);
+        const result = await uploadDetection(file, token);
       setUploadProgress(100);
       setLastSummary(`✓ Detected ${result.detections?.length ?? 0} objects in ${file.name}`);
       setTimeout(() => setUploadProgress(0), 2000);
