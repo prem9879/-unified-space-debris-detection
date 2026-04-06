@@ -250,3 +250,16 @@ export async function legacyOptions(apiKey?: string): Promise<any> {
   });
   return parseLegacyResponse(res);
 }
+
+export async function legacyMissionStatus(folder?: string, apiKey?: string): Promise<any> {
+  const url = new URL(`${LEGACY_API_BASE}/mission_status`, window.location.origin);
+  if (folder?.trim()) {
+    url.searchParams.set("folder", folder.trim());
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: legacyHeaders(apiKey),
+  });
+
+  return parseLegacyResponse(res);
+}

@@ -277,7 +277,17 @@ def enforce_runtime_security_controls():
     if locked:
         return jsonify({"error": "identity temporarily locked", "locked_until_epoch": until}), 423
 
-    open_paths = {"/", "/healthz", "/readyz", "/options", "/app"}
+    open_paths = {
+        "/",
+        "/healthz",
+        "/readyz",
+        "/options",
+        "/app",
+        "/mission_status",
+        "/legacy-api/mission_status",
+        "/legacy-api/readyz",
+        "/legacy-api/options",
+    }
     if request.path.startswith("/static") or request.path.startswith("/app") or request.path.startswith("/assets") or request.path in open_paths:
         return None
 
@@ -1067,6 +1077,101 @@ def dataset_inventory():
     limit = int(request.args.get("limit", "500"))
     items = build_dataset_inventory(folder, limit=limit)
     return jsonify({"folder": folder, "count": len(items), "items": items})
+
+
+@app.get("/mission_status")
+@app.get("/legacy-api/mission_status")
+def mission_status():
+    folder = request.args.get("folder", "").strip()
+    if not folder:
+        folder = str(DEFAULT_IMAGES_DIR if DEFAULT_IMAGES_DIR.exists() else (ROOT / "data"))
+
+    checkpoint_exists = CHECKPOINT.exists()
+    service_ready = False
+    service_error = ""
+    if checkpoint_exists:
+        try:
+            _load_service()
+            service_ready = True
+        except Exception as exc:
+            service_error = str(exc)
+
+    benchmark_path = ROOT / "artifacts" / "image_bench" / "image_bench_summary.json"
+    benchmark_payload = _load_json_if_exists(benchmark_path)
+    benchmark_models = []
+    for model_name, stats in (benchmark_payload.get("results", {}) or {}).items():
+        benchmark_models.append(
+            {
+                "model": model_name,
+                "accuracy": stats.get("accuracy", 0.0),
+                "precision": stats.get("precision", 0.0),
+                "recall": stats.get("recall", 0.0),
+                "f1": stats.get("f1", 0.0),
+                "test_loss": stats.get("test_loss", 0.0),
+                "checkpoint": stats.get("checkpoint", ""),
+            }
+        )
+
+    try:
+        brief = _build_orbital_brief()
+        orbital_ok = True
+        orbital_error = ""
+    except Exception as exc:
+        brief = {}
+        orbital_ok = False
+        orbital_error = str(exc)
+
+    try:
+        inventory_items = build_dataset_inventory(folder, limit=1)
+        dataset_state = {
+            "state": "ready",
+            "detail": f"{len(inventory_items)}+ files discoverable",
+            "folder": folder,
+        }
+    except Exception as exc:
+        dataset_state = {
+            "state": "warning",
+            "detail": str(exc),
+            "folder": folder,
+        }
+
+    model_choices = sorted(_resolve_model_checkpoint_map().keys())
+    layers: list[str] = []
+    if checkpoint_exists:
+        try:
+            layers = _load_service().list_layers()
+        except Exception:
+            layers = []
+
+    return jsonify(
+        {
+            "readyz": {
+                "status": "ready" if service_ready else "not_ready",
+                "checkpoint_exists": checkpoint_exists,
+                "error": service_error,
+            },
+            "benchmark": {
+                "state": "ready" if len(benchmark_models) > 0 else "warning",
+                "models": benchmark_models,
+                "num_models": len(benchmark_models),
+            },
+            "orbital": {
+                "state": "ready" if orbital_ok else "warning",
+                "alerts": (brief.get("visualization", {}) or {}).get("alerts", []),
+                "brief": brief,
+                "error": orbital_error,
+            },
+            "dataset": dataset_state,
+            "options": {
+                "layers": layers,
+                "model_choices": model_choices,
+                "bands": ["rgb", "r", "g", "b", "rg", "rb", "gb"],
+                "normalize_modes": ["unit", "zscore", "none"],
+                "image_sizes": [64, 96, 128, 160, 224],
+                "dataset_sources": curated_sources(),
+            },
+        }
+    )
 
 
 @app.get("/gallery_inventory")
