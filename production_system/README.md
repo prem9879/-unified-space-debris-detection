@@ -30,6 +30,16 @@ Optional GPU model runtime install:
 pip install -r requirements-ml.txt
 ```
 
+Set checkpoint paths with environment variables:
+
+```bash
+export YOLOV8_CHECKPOINT=models/yolov8.pt
+export VIT_CHECKPOINT=models/vit.bin
+export SAM_CHECKPOINT=models/sam.pth
+export CONVLSTM_CHECKPOINT=models/convlstm.pt
+export BAYESIAN_CHECKPOINT=models/bayesian.pt
+```
+
 1. Frontend
 
 ```bash
@@ -82,3 +92,5 @@ This implementation provides production-ready architecture and interfaces with d
 cd production_system/backend
 python scripts/benchmark_stub.py
 ```
+
+For load testing, run k6 scripts under `production_system/loadtests`.

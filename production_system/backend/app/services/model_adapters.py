@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from app.core.config import get_settings
 
 
 @dataclass
@@ -19,18 +22,22 @@ class ModelAdapters:
     """
 
     def __init__(self) -> None:
+        settings = get_settings()
         self.statuses = {
-            "yolov8": self._probe("ultralytics"),
-            "vit": self._probe("transformers"),
-            "sam": self._probe("segment_anything"),
-            "convlstm": self._probe("torch"),
-            "bayesian_uq": self._probe("torch"),
+            "yolov8": self._probe("ultralytics", settings.yolov8_checkpoint),
+            "vit": self._probe("transformers", settings.vit_checkpoint),
+            "sam": self._probe("segment_anything", settings.sam_checkpoint),
+            "convlstm": self._probe("torch", settings.convlstm_checkpoint),
+            "bayesian_uq": self._probe("torch", settings.bayesian_checkpoint),
         }
 
-    def _probe(self, module_name: str) -> AdapterStatus:
+    def _probe(self, module_name: str, checkpoint_path: str) -> AdapterStatus:
+        checkpoint_exists = Path(checkpoint_path).exists()
         try:
             __import__(module_name)
-            return AdapterStatus(name=module_name, enabled=True, reason="available")
+            if checkpoint_exists:
+                return AdapterStatus(name=module_name, enabled=True, reason="available+checkpoint")
+            return AdapterStatus(name=module_name, enabled=False, reason="checkpoint-missing")
         except Exception:
             return AdapterStatus(name=module_name, enabled=False, reason="fallback")
 

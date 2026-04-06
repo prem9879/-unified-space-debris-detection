@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     max_requests_per_minute: int = 100
     max_tracking_objects: int = 100
 
+    yolov8_checkpoint: str = "models/yolov8.pt"
+    vit_checkpoint: str = "models/vit.bin"
+    sam_checkpoint: str = "models/sam.pth"
+    convlstm_checkpoint: str = "models/convlstm.pt"
+    bayesian_checkpoint: str = "models/bayesian.pt"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

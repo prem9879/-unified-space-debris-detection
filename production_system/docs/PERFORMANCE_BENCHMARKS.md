@@ -24,3 +24,11 @@
 - Run k6 load tests for API.
 - Use browser trace for frontend load.
 - Measure stream jitter and dropped frames under load.
+
+## k6 Execution
+
+```bash
+cd production_system/loadtests
+k6 run k6_api.js
+k6 run k6_stream.js
+```

@@ -19,6 +19,8 @@ htmlcov/
 node_modules/
 logs/
 test-results/
+dist/
+*.tsbuildinfo
 
 # Large generated artifacts and datasets
 artifacts/
@@ -35,3 +37,8 @@ data/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Production system frontend generated outputs
+production_system/frontend/dist/
+production_system/frontend/src/**/*.js
+production_system/frontend/*.tsbuildinfo
