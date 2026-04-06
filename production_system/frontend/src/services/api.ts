@@ -169,6 +169,34 @@ export async function legacyPredictFile(params: {
   return parseLegacyResponse(res);
 }
 
+export async function legacyCalibrationReport(params: {
+  datasetDir: string;
+  modality: string;
+  maxSamples: number;
+  bins: number;
+  imageSize: number;
+  opticalBand: string;
+  normalizeMode: string;
+  apiKey?: string;
+}): Promise<any> {
+  const form = new FormData();
+  form.append("dataset_dir", params.datasetDir);
+  form.append("modality", params.modality);
+  form.append("max_samples", String(params.maxSamples));
+  form.append("bins", String(params.bins));
+  form.append("image_size", String(params.imageSize));
+  form.append("optical_band", params.opticalBand);
+  form.append("normalize_mode", params.normalizeMode);
+
+  const res = await fetch(`${LEGACY_API_BASE}/calibration_report`, {
+    method: "POST",
+    headers: legacyHeaders(params.apiKey),
+    body: form,
+  });
+
+  return parseLegacyResponse(res);
+}
+
 export async function legacyReadyz(apiKey?: string): Promise<any> {
   const res = await fetch(`${LEGACY_API_BASE}/readyz`, {
     headers: legacyHeaders(apiKey),

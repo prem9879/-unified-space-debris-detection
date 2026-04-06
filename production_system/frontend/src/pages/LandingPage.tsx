@@ -1,6 +1,19 @@
 import { motion } from "framer-motion";
 import { type ReactElement, useEffect, useState } from "react";
+import { Bar, Line } from "react-chartjs-2";
 import {
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  Legend,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip,
+  BarElement,
+} from "chart.js";
+import {
+  legacyCalibrationReport,
   legacyDatasetInventory,
   legacyLoadAllPublicData,
   legacyModelBenchmark,
@@ -11,6 +24,8 @@ import {
   legacyPreviewNasaSolarflux,
   legacyReadyz,
 } from "../services/api";
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend, Filler);
 
 interface LandingPageProps {
   onNavigate?: () => void;
@@ -24,7 +39,7 @@ type ReadinessItem = {
   detail: string;
 };
 
-type MissionTab = "all" | "overview" | "orbital" | "benchmarks" | "inference" | "data" | "research";
+type MissionTab = "all" | "overview" | "orbital" | "benchmarks" | "inference" | "data" | "analyze" | "research";
 
 export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   type ExplorerItem = {
@@ -64,6 +79,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [selectedBusy, setSelectedBusy] = useState<boolean>(false);
   const [selectedResult, setSelectedResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<MissionTab>("all");
+  const [calibrationBusy, setCalibrationBusy] = useState<boolean>(false);
+  const [calibrationStatus, setCalibrationStatus] = useState<string>("Calibration report not loaded.");
+  const [calibrationReport, setCalibrationReport] = useState<any>(null);
   const [legacyApiKey, setLegacyApiKey] = useState<string>(localStorage.getItem("legacyApiKey") ?? "");
   const [legacyReady, setLegacyReady] = useState<string>("Checking console health...");
   const [benchBusy, setBenchBusy] = useState<boolean>(false);
@@ -144,6 +162,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     { key: "benchmarks", label: "Model Stack", sectionId: "section-benchmarks" },
     { key: "inference", label: "Live Inference", sectionId: "section-inference" },
     { key: "data", label: "Data Ops", sectionId: "section-data" },
+    { key: "analyze", label: "Analyze", sectionId: "section-analyze" },
     { key: "research", label: "Research Pack", sectionId: "section-q4" },
   ];
 
@@ -532,6 +551,97 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     } finally {
       setSelectedBusy(false);
     }
+  };
+
+  const loadCalibration = async () => {
+    setCalibrationBusy(true);
+    setCalibrationStatus("Loading calibration report...");
+    try {
+      const report = await legacyCalibrationReport({
+        datasetDir,
+        modality: batchModality,
+        maxSamples: Math.max(20, maxSamples),
+        bins: 10,
+        imageSize,
+        opticalBand,
+        normalizeMode,
+        apiKey: legacyApiKey,
+      });
+      setCalibrationReport(report);
+      const ece = Number(report?.metrics?.ece ?? 0);
+      setCalibrationStatus(`Calibration loaded. ECE=${ece.toFixed(4)}.`);
+    } catch (error) {
+      setCalibrationStatus(`Calibration load failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      setCalibrationReport(null);
+    } finally {
+      setCalibrationBusy(false);
+    }
+  };
+
+  const batchSamples = Array.isArray(batchResult?.samples) ? batchResult.samples : [];
+  const riskLabels = batchSamples.slice(0, 20).map((item: any) => item.file_name ?? "sample");
+  const riskValues = batchSamples.slice(0, 20).map((item: any) => Number(item.collision_probability ?? 0) * 100);
+  const detectValues = batchSamples.slice(0, 20).map((item: any) => Number(item.detect_probability ?? 0) * 100);
+
+  const riskSurfaceData = {
+    labels: riskLabels,
+    datasets: [
+      {
+        label: "Collision Risk %",
+        data: riskValues,
+        borderColor: "rgba(248,113,113,1)",
+        backgroundColor: "rgba(248,113,113,0.2)",
+        fill: true,
+        tension: 0.25,
+      },
+      {
+        label: "Debris Confidence %",
+        data: detectValues,
+        borderColor: "rgba(34,197,94,1)",
+        backgroundColor: "rgba(34,197,94,0.1)",
+        fill: false,
+        tension: 0.25,
+      },
+    ],
+  };
+
+  const leaderboardData = {
+    labels: displayedModelBenchmarks.map((item) => item.name),
+    datasets: [
+      {
+        label: "Accuracy %",
+        data: displayedModelBenchmarks.map((item) => item.accuracy),
+        backgroundColor: "rgba(56,189,248,0.7)",
+      },
+      {
+        label: "F1 x100",
+        data: displayedModelBenchmarks.map((item) => item.f1 * 100),
+        backgroundColor: "rgba(74,222,128,0.7)",
+      },
+    ],
+  };
+
+  const reliabilityBins = Array.isArray(calibrationReport?.metrics?.reliability_bins)
+    ? calibrationReport.metrics.reliability_bins
+    : [];
+  const reliabilityData = {
+    labels: reliabilityBins.map((_: any, idx: number) => `Bin ${idx + 1}`),
+    datasets: [
+      {
+        label: "Predicted Confidence",
+        data: reliabilityBins.map((bin: any) => Number(bin.mean_confidence ?? 0) * 100),
+        borderColor: "rgba(250,204,21,1)",
+        backgroundColor: "rgba(250,204,21,0.15)",
+        tension: 0.25,
+      },
+      {
+        label: "Observed Accuracy",
+        data: reliabilityBins.map((bin: any) => Number(bin.empirical_accuracy ?? 0) * 100),
+        borderColor: "rgba(59,130,246,1)",
+        backgroundColor: "rgba(59,130,246,0.15)",
+        tension: 0.25,
+      },
+    ],
   };
 
   return (
@@ -1428,6 +1538,78 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   </div>
                 )}
               </motion.div>
+            </div>
+          </div>
+        </motion.div>}
+
+        {/* Analyze Section */}
+        {isTabVisible("analyze") && <motion.div
+          id="section-analyze"
+          className="px-6 py-12 border-t border-slate-700/30"
+          variants={itemVariants}
+          initial="hidden"
+          whileInView={{ opacity: 1, y: 0 }}
+        >
+          <div className="mx-auto max-w-7xl space-y-8">
+            <h2 className="text-3xl lg:text-4xl font-black text-white">Analyze</h2>
+            <p className="text-slate-300">Charts, calibration, and inspection overlays live here, similar to the old console.</p>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Collision Risk Surface</p>
+                <Line data={riskSurfaceData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+              </div>
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Model Leaderboard</p>
+                <Bar data={leaderboardData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm uppercase tracking-widest text-slate-400">Reliability Diagram</p>
+                <button
+                  onClick={() => void loadCalibration()}
+                  disabled={calibrationBusy || readiness.predictDataset.state !== "ready"}
+                  className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
+                >
+                  {calibrationBusy ? "Loading..." : "Load Calibration Report"}
+                </button>
+              </div>
+              <p className="text-sm text-slate-300">{calibrationStatus}</p>
+              {reliabilityBins.length > 0
+                ? <Line data={reliabilityData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+                : <p className="text-sm text-slate-400">Calibration report not loaded.</p>}
+            </div>
+
+            <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+              <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Batch Visual Grid</p>
+              {batchSamples.length === 0
+                ? <p className="text-sm text-slate-400">Run dataset batch to populate visual grid.</p>
+                : <div className="grid md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {batchSamples.slice(0, 12).map((sample: any) => (
+                    <div key={sample.file_name} className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-3 text-xs text-slate-200 space-y-2">
+                      <p className="font-semibold truncate">{sample.file_name}</p>
+                      {sample.thumb && <img src={sample.thumb} alt={sample.file_name} className="w-full h-24 object-cover rounded" />}
+                      {sample.bbox_overlay_thumb && <img src={sample.bbox_overlay_thumb} alt={`${sample.file_name} bbox overlay`} className="w-full h-24 object-cover rounded" />}
+                      <p>Detect: {(Number(sample.detect_probability ?? 0) * 100).toFixed(1)}%</p>
+                      <p>Collision: {(Number(sample.collision_probability ?? 0) * 100).toFixed(1)}%</p>
+                      <p>Label: {sample.detect_label ?? "-"}</p>
+                      <p>Confidence: {sample.decision_basis?.confidence_band ?? "-"}</p>
+                    </div>
+                  ))}
+                </div>}
+            </div>
+
+            <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+              <p className="text-sm uppercase tracking-widest text-slate-400 mb-4">Research Insight Panel</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Debris Confidence</p><p className="text-xl font-bold text-green-400">{inferResult ? `${(Number(inferResult.detect_probability ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Collision Risk</p><p className="text-xl font-bold text-red-400">{inferResult ? `${(Number(inferResult.collision_probability ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Prediction Uncertainty</p><p className="text-xl font-bold text-yellow-300">{inferResult ? `${(100 - Number(inferResult.class_probabilities?.[inferResult.predicted_class] ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
+                <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Evidence Intensity</p><p className="text-xl font-bold text-cyan-300">{inferResult ? `${((inferResult.decision_basis?.hot_pixel_ratio ?? 0) * 100).toFixed(1)}%` : "0%"}</p></div>
+              </div>
+              <p className="text-sm text-slate-300 mt-4">Use the risk surface for immediate threat split, the visual grid for evidence checks, and reliability for confidence calibration review.</p>
             </div>
           </div>
         </motion.div>}
