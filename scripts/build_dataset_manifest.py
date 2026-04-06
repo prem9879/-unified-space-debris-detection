@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from _bootstrap import PROJECT_ROOT  # noqa: F401
 from src.data.dataset_manifest import create_dataset_manifest
 
 

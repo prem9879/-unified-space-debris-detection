@@ -22,15 +22,25 @@ def build_pack(manifest: Path, benchmark: Path, calibration: Path, slo: Path, se
     hard_negative_payload = _load_json(hard_negative)
 
     benchmark_results = benchmark_payload.get("results", {})
-    if not benchmark_results:
-        benchmark_results = benchmark_payload.get("benchmark", {}).get("best_model", {})
+    benchmark_best_model = benchmark_payload.get("benchmark", {}).get("best_model", {})
+    benchmark_available = bool(benchmark_results) or bool(benchmark_best_model)
+
+    acceptance_gates = calibration_payload.get("acceptance_gates", {})
+    scientific_gate = bool(manifest_payload.get("manifest_digest")) and bool(acceptance_gates.get("passed") is True)
+
+    hard_negative_summary = hard_negative_payload.get("summary", {})
+    hard_negative_gate = bool(
+        isinstance(hard_negative_summary, dict)
+        and "total_files" in hard_negative_summary
+        and "categories_present" in hard_negative_summary
+    )
 
     gates = {
-        "scientific": bool(manifest_payload.get("manifest_digest") and calibration_payload.get("acceptance_gates")),
+        "scientific": scientific_gate,
         "reliability": bool(slo_payload.get("latency_ms")),
         "security": bool(security_payload.get("auth_required") is not None),
-        "deployment": bool(benchmark_results),
-        "hard_negatives": bool(hard_negative_payload.get("summary", {}).get("total_files", 0) >= 0),
+        "deployment": benchmark_available,
+        "hard_negatives": hard_negative_gate,
     }
 
     pack = {
@@ -39,8 +49,8 @@ def build_pack(manifest: Path, benchmark: Path, calibration: Path, slo: Path, se
             "manifest_digest": manifest_payload.get("manifest_digest"),
             "split_protocol": manifest_payload.get("split_protocol", {}),
             "class_balance": manifest_payload.get("class_counts", {}),
-            "benchmark_best_model": benchmark_results,
-            "calibration_acceptance": calibration_payload.get("acceptance_gates", {}),
+            "benchmark_best_model": benchmark_best_model or benchmark_results,
+            "calibration_acceptance": acceptance_gates,
             "slo": slo_payload,
             "security_policy": security_payload,
             "hard_negative_index": hard_negative_payload.get("summary", {}),

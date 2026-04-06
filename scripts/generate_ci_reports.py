@@ -10,6 +10,7 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 
+from _bootstrap import PROJECT_ROOT  # noqa: F401
 from src.data.synthetic_dataset import SyntheticDebrisDataset
 from src.evaluation.classification_metrics import compute_classification_metrics
 from src.evaluation.collision_metrics import compute_auc_roc, compute_brier, compute_ece

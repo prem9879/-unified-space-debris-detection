@@ -35,7 +35,8 @@ def test_build_readiness_pack(tmp_path) -> None:
     slo.write_text(json.dumps({"latency_ms": {"p50": 10, "p95": 20}}), encoding="utf-8")
     security.write_text(json.dumps({"auth_required": True}), encoding="utf-8")
     hard_negative.write_text(
-        json.dumps({"summary": {"total_files": 12}}), encoding="utf-8"
+        json.dumps({"summary": {"total_files": 12, "categories_present": 2}}),
+        encoding="utf-8",
     )
 
     pack = build_pack(
@@ -50,3 +51,34 @@ def test_build_readiness_pack(tmp_path) -> None:
     assert pack["gates"]["deployment"] is True
     assert pack["gates"]["hard_negatives"] is True
     assert pack["scores_target"]["scientific_credibility"] == 9.0
+
+
+def test_build_readiness_pack_requires_calibration_pass(tmp_path) -> None:
+    manifest = tmp_path / "manifest.json"
+    benchmark = tmp_path / "benchmark.json"
+    calibration = tmp_path / "calibration.json"
+    slo = tmp_path / "slo.json"
+    security = tmp_path / "security.json"
+    hard_negative = tmp_path / "hard_negative.json"
+    output = tmp_path / "readiness.json"
+
+    manifest.write_text(json.dumps({"manifest_digest": "abc123"}), encoding="utf-8")
+    benchmark.write_text(
+        json.dumps({"benchmark": {"best_model": {"name": "resnet18", "f1": 0.9}}}), encoding="utf-8"
+    )
+    calibration.write_text(
+        json.dumps({"acceptance_gates": {"passed": False}}), encoding="utf-8"
+    )
+    slo.write_text(json.dumps({"latency_ms": {"p50": 10}}), encoding="utf-8")
+    security.write_text(json.dumps({"auth_required": True}), encoding="utf-8")
+    hard_negative.write_text(
+        json.dumps({"summary": {"total_files": 0, "categories_present": 0}}), encoding="utf-8"
+    )
+
+    pack = build_pack(
+        manifest, benchmark, calibration, slo, security, hard_negative, output
+    )
+
+    assert pack["gates"]["deployment"] is True
+    assert pack["gates"]["scientific"] is False
+    assert pack["status"] == "needs_work"

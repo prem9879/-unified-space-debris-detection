@@ -8,6 +8,8 @@ import math
 import os
 from pathlib import Path
 
+from _bootstrap import PROJECT_ROOT  # noqa: F401
+
 
 def _confidence_interval_wilson(successes: float, n: float, z: float = 1.96) -> tuple[float, float]:
     if n <= 0:

@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from _bootstrap import PROJECT_ROOT  # noqa: F401
 from src.data.local_dataset_loader import IMAGE_EXTENSIONS
 
 

@@ -34,6 +34,8 @@ jobs:
         run: |
           npm run test:ui
       - name: Generate calibration/eval artifacts
+        env:
+          PYTHONPATH: .
         run: |
           python scripts/generate_ci_reports.py
           python scripts/generate_security_policy.py
