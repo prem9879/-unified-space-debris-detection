@@ -74,7 +74,6 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [uploadedDatasetFiles, setUploadedDatasetFiles] = useState<File[]>([]);
   const [uploadBatchBusy, setUploadBatchBusy] = useState<boolean>(false);
   const [uploadBatchStatus, setUploadBatchStatus] = useState<string>("No uploaded dataset run yet.");
-  const [legacyEmbedVisible, setLegacyEmbedVisible] = useState<boolean>(false);
 
   const [explorerBusy, setExplorerBusy] = useState<boolean>(false);
   const [explorerStatus, setExplorerStatus] = useState<string>("Scan the folder to start exploring images.");
@@ -1694,7 +1693,7 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm uppercase tracking-widest text-slate-400">Legacy 7860 Console</p>
-                  <p className="text-sm text-slate-300 mt-1">Open or embed the full original app at 127.0.0.1:7860 to access every old control exactly as before.</p>
+                  <p className="text-sm text-slate-300 mt-1">Open the full original app at 127.0.0.1:7860 to access every old control exactly as before.</p>
                 </div>
                 <div className="flex gap-2">
                   <a
@@ -1705,23 +1704,9 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   >
                     Open 7860
                   </a>
-                  <button
-                    onClick={() => setLegacyEmbedVisible((prev) => !prev)}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold"
-                  >
-                    {legacyEmbedVisible ? "Hide Embed" : "Show Embed"}
-                  </button>
                 </div>
               </div>
-              {legacyEmbedVisible && (
-                <div className="mt-4 rounded-lg overflow-hidden border border-slate-700/50">
-                  <iframe
-                    src="http://127.0.0.1:7860/"
-                    title="Legacy mission console"
-                    className="w-full h-[720px] bg-slate-950"
-                  />
-                </div>
-              )}
+              <p className="text-xs text-slate-400 mt-3">If the page does not open, start the Flask app first and then click Open 7860.</p>
             </div>
           </div>
         </motion.div>}
