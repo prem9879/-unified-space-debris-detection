@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { type CSSProperties, type ReactElement, useEffect, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import {
   CategoryScale,
@@ -13,6 +13,9 @@ import {
   BarElement,
 } from "chart.js";
 import {
+  API_BASE,
+  fetchCollisionRisk,
+  fetchLiveTrackingSnapshot,
   legacyCalibrationReport,
   legacyDatasetInventory,
   legacyLoadAllPublicData,
@@ -110,6 +113,12 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const [benchBusy, setBenchBusy] = useState<boolean>(false);
   const [liveModelBenchmarks, setLiveModelBenchmarks] = useState<any[]>([]);
   const [orbitalBrief, setOrbitalBrief] = useState<any>(null);
+  const [collisionRiskBusy, setCollisionRiskBusy] = useState<boolean>(false);
+  const [collisionRiskStatus, setCollisionRiskStatus] = useState<string>("Collision contract not run yet.");
+  const [collisionRiskResult, setCollisionRiskResult] = useState<any>(null);
+  const [liveTracking, setLiveTracking] = useState<any[]>([]);
+  const [liveTrackingStatus, setLiveTrackingStatus] = useState<string>("Waiting for live-tracking feed.");
+  const liveTrackingSocketRef = useRef<WebSocket | null>(null);
   const [checksBusy, setChecksBusy] = useState<boolean>(false);
   const [readiness, setReadiness] = useState<Record<string, ReadinessItem>>({
     readyz: { label: "Core Service", state: "pending", detail: "Waiting" },
@@ -484,6 +493,76 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetDir, legacyApiKey]);
 
+  useEffect(() => {
+    let fallbackInterval: number | null = null;
+    let cleaned = false;
+
+    const pollSnapshot = async () => {
+      try {
+        const snap = await fetchLiveTrackingSnapshot();
+        const objects = Array.isArray(snap?.objects) ? snap.objects : [];
+        setLiveTracking(objects);
+        setLiveTrackingStatus(`Live-tracking snapshot active: ${objects.length} objects.`);
+      } catch (error) {
+        setLiveTracking([]);
+        setLiveTrackingStatus(error instanceof Error ? error.message : "Live tracking unavailable");
+      }
+    };
+
+    const startFallback = () => {
+      if (fallbackInterval !== null) return;
+      void pollSnapshot();
+      fallbackInterval = window.setInterval(() => {
+        void pollSnapshot();
+      }, 4000);
+    };
+
+    const wsBase = API_BASE.replace(/^http/i, "ws");
+    const wsUrl = `${wsBase}/api/v1/streams/live-tracking`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      liveTrackingSocketRef.current = ws;
+
+      ws.onopen = () => {
+        setLiveTrackingStatus("Live websocket connected.");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data ?? "{}"));
+          const objects = Array.isArray(payload?.objects) ? payload.objects : [];
+          setLiveTracking(objects);
+          setLiveTrackingStatus(`Live websocket stream: ${objects.length} objects.`);
+        } catch {
+          setLiveTrackingStatus("Live websocket data parse warning.");
+        }
+      };
+
+      ws.onerror = () => {
+        setLiveTrackingStatus("WebSocket unavailable, switching to HTTP fallback.");
+      };
+
+      ws.onclose = () => {
+        if (!cleaned) {
+          setLiveTrackingStatus("WebSocket closed, using HTTP fallback.");
+          startFallback();
+        }
+      };
+    } catch {
+      startFallback();
+    }
+
+    return () => {
+      cleaned = true;
+      if (fallbackInterval !== null) {
+        window.clearInterval(fallbackInterval);
+      }
+      liveTrackingSocketRef.current?.close();
+      liveTrackingSocketRef.current = null;
+    };
+  }, []);
+
   const runLivePrediction = async () => {
     setInferBusy(true);
     setInferStatus("Running prediction...");
@@ -790,6 +869,56 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
     }
   };
 
+  const runCollisionRiskContract = async () => {
+    setCollisionRiskBusy(true);
+    setCollisionRiskStatus("Running /collision-risk contract...");
+    try {
+      const basePosition = [7000.0, 12.0, 8.0];
+      const baseVelocity = [0.01, 7.62, 0.02];
+      const secondaryPosition = [7000.8, 12.35, 8.12];
+      const secondaryVelocity = [0.0, 7.55, 0.01];
+
+      const now = Date.now() / 1000;
+      const historyA = [0, 1, 2, 3].map((step) => ({
+        t_s: now + step * 60,
+        x_km: basePosition[0] + step * 0.09,
+        y_km: basePosition[1] + step * 0.42,
+        z_km: basePosition[2] + step * 0.03,
+      }));
+      const historyB = [0, 1, 2, 3].map((step) => ({
+        t_s: now + step * 60,
+        x_km: secondaryPosition[0] + step * 0.07,
+        y_km: secondaryPosition[1] + step * 0.38,
+        z_km: secondaryPosition[2] + step * 0.025,
+      }));
+
+      const result = await fetchCollisionRisk({
+        object_a: "SAT-PRIMARY",
+        object_b: "DEBRIS-TRACK-07",
+        position_a_km: basePosition,
+        velocity_a_km_s: baseVelocity,
+        position_b_km: secondaryPosition,
+        velocity_b_km_s: secondaryVelocity,
+        ai_forecast_horizon_s: 3600,
+        ai_risk_weight: 0.4,
+        history_a: historyA,
+        history_b: historyB,
+      });
+
+      setCollisionRiskResult(result);
+      setCollisionRiskStatus(
+        `Contract complete. Closest ${Number(result.closest_approach_km ?? 0).toFixed(3)} km, Risk ${Number(result.risk_score ?? 0).toFixed(2)}%.`
+      );
+      showToast("success", "Collision contract synced", "Analyze now reflects FastAPI /collision-risk outputs.");
+    } catch (error) {
+      setCollisionRiskResult(null);
+      setCollisionRiskStatus(error instanceof Error ? error.message : "Collision contract failed");
+      showToast("error", "Collision contract failed", "Start FastAPI backend on port 8000 and retry.");
+    } finally {
+      setCollisionRiskBusy(false);
+    }
+  };
+
   const batchSamples = Array.isArray(batchResult?.samples) ? batchResult.samples : [];
   const insightResult = inferResult ?? selectedResult ?? batchSamples[0] ?? null;
   const insightDebris = Number(insightResult?.detect_probability ?? 0);
@@ -828,6 +957,54 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
       },
     ],
   };
+
+  const liveTrackingData = {
+    labels: liveTracking.map((obj: any) => String(obj?.id ?? "obj")),
+    datasets: [
+      {
+        label: "Live Risk %",
+        data: liveTracking.map((obj: any) => Number(obj?.risk ?? 0) * 100),
+        backgroundColor: "rgba(34,211,238,0.65)",
+      },
+      {
+        label: "Velocity km/s",
+        data: liveTracking.map((obj: any) => Number(obj?.velocity_km_s ?? 0)),
+        backgroundColor: "rgba(248,113,113,0.5)",
+      },
+    ],
+  };
+
+  const insightRgb = insightResult?.rgb_analysis ?? null;
+  const rgbHistogramData = {
+    labels: Array.from({ length: 256 }, (_, idx) => String(idx)),
+    datasets: [
+      {
+        label: "R",
+        data: Array.isArray(insightRgb?.r_histogram) ? insightRgb.r_histogram : [],
+        borderColor: "rgba(248,113,113,0.9)",
+        backgroundColor: "rgba(248,113,113,0.15)",
+        tension: 0.2,
+      },
+      {
+        label: "G",
+        data: Array.isArray(insightRgb?.g_histogram) ? insightRgb.g_histogram : [],
+        borderColor: "rgba(74,222,128,0.9)",
+        backgroundColor: "rgba(74,222,128,0.12)",
+        tension: 0.2,
+      },
+      {
+        label: "B",
+        data: Array.isArray(insightRgb?.b_histogram) ? insightRgb.b_histogram : [],
+        borderColor: "rgba(56,189,248,0.9)",
+        backgroundColor: "rgba(56,189,248,0.12)",
+        tension: 0.2,
+      },
+    ],
+  };
+
+  const expectedPathLabel = String(insightResult?.expected_label_from_path ?? "unknown");
+  const predictedPathLabel = String(insightResult?.decision_basis?.predicted_label ?? "uncertain");
+  const verificationMatch = insightResult?.is_path_label_match;
 
   const leaderboardData = {
     labels: displayedModelBenchmarks.map((item) => item.name),
@@ -879,6 +1056,34 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
   const trackedCount = orbitalScene.length || Number(orbitalBrief?.stats?.tracked_objects ?? 6);
   const shellCount = Number(orbitalBrief?.visualization?.shells?.length ?? orbitalBrief?.stats?.shells ?? 3);
   const alertCount = orbitalAlerts.length || Number(orbitalBrief?.stats?.alerts ?? 0);
+
+  const liveSceneObjects = liveTracking.map((obj: any, idx: number) => {
+    const risk = Number(obj?.risk ?? 0);
+    return {
+      name: String(obj?.id ?? `OBJ-${idx + 1}`),
+      shell: "LEO",
+      risk_score: risk,
+      color: risk >= 0.75 ? "#ff5d5d" : risk >= 0.45 ? "#fbbf24" : "#35d1ff",
+      orbit_phase: (idx + 1) / Math.max(1, liveTracking.length),
+    };
+  });
+
+  const liveAlertObjects = liveTracking
+    .filter((obj: any) => Number(obj?.risk ?? 0) >= 0.45)
+    .map((obj: any) => {
+      const risk = Number(obj?.risk ?? 0);
+      return {
+        object: String(obj?.id ?? "OBJECT"),
+        risk_band: risk >= 0.75 ? "HIGH" : "MEDIUM",
+        risk_score: risk,
+        recommended_action: risk >= 0.75 ? "Escalate conjunction review" : "Track closely",
+      };
+    });
+
+  const renderedOrbitalScene = liveSceneObjects.length > 0 ? liveSceneObjects : orbitalScene;
+  const renderedOrbitalAlerts = liveAlertObjects.length > 0 ? liveAlertObjects : orbitalAlerts;
+  const renderedTrackedCount = renderedOrbitalScene.length || trackedCount;
+  const renderedAlertCount = renderedOrbitalAlerts.length || alertCount;
 
   const markerStyle = (obj: any, idx: number): CSSProperties => {
     const phase = Number(obj?.orbit_phase ?? (idx + 1) / 6);
@@ -1466,8 +1671,8 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(191,219,254,0.6),rgba(30,64,175,0.28)_55%,rgba(15,23,42,0.95)_100%)] border border-blue-200/15 shadow-[0_0_40px_rgba(56,189,248,0.22)] flex items-center justify-center">
                     <span className="text-slate-100 font-black tracking-[0.2em] text-sm">EARTH</span>
                   </div>
-                  {(orbitalScene.length > 0
-                    ? orbitalScene.slice(0, 10)
+                  {(renderedOrbitalScene.length > 0
+                    ? renderedOrbitalScene.slice(0, 10)
                     : [
                         { name: "DEBRIS-A", shell: "LEO", risk_score: 0.68, color: "#fbbf24", orbit_phase: 0.2 },
                         { name: "DEBRIS-B", shell: "LEO", risk_score: 0.75, color: "#ff5d5d", orbit_phase: 0.58 },
@@ -1485,16 +1690,17 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                   ))}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Tracked Objects</p><p className="text-xl font-bold text-white">{trackedCount}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Tracked Objects</p><p className="text-xl font-bold text-white">{renderedTrackedCount}</p></div>
                   <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Shells</p><p className="text-xl font-bold text-white">{shellCount}</p></div>
-                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Alerts</p><p className="text-xl font-bold text-white">{alertCount}</p></div>
+                  <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Alerts</p><p className="text-xl font-bold text-white">{renderedAlertCount}</p></div>
                   <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-xs text-slate-400">Mode</p><p className="text-sm font-bold text-white">Physics-gated fusion</p></div>
                 </div>
+                <p className="text-xs text-cyan-300 mt-3">{liveTrackingStatus}</p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-slate-900/85 via-slate-900/80 to-slate-950/90 border border-slate-700/60 p-6 shadow-[0_0_20px_rgba(15,23,42,0.35)]">
                 <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Collision Alert Panel</p>
                 <div className="space-y-3 text-sm text-slate-200">
-                  {(orbitalAlerts.length > 0 ? orbitalAlerts : [
+                  {(renderedOrbitalAlerts.length > 0 ? renderedOrbitalAlerts : [
                     { object: "DEBRIS-B", risk_band: "HIGH", risk_score: 0.754, recommended_action: "Escalate conjunction review" },
                     { object: "DEBRIS-E", risk_band: "HIGH", risk_score: 0.708, recommended_action: "Escalate conjunction review" },
                     { object: "DEBRIS-A", risk_band: "MEDIUM", risk_score: 0.680, recommended_action: "Track closely" },
@@ -2129,6 +2335,18 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                     <p>Detect: {(Number(selectedResult.detect_probability ?? 0) * 100).toFixed(2)}%</p>
                     <p>Collision: {(Number(selectedResult.collision_probability ?? 0) * 100).toFixed(2)}%</p>
                     <p>Class: {String(selectedResult.predicted_class ?? "n/a")}</p>
+                    <p>Expected (Path): {String(selectedResult.expected_label_from_path ?? "unknown")}</p>
+                    <p
+                      className={
+                        selectedResult.is_path_label_match === true
+                          ? "text-green-300"
+                          : selectedResult.is_path_label_match === false
+                            ? "text-red-300"
+                            : "text-yellow-300"
+                      }
+                    >
+                      {String(selectedResult.verification_message ?? "No verification message.")}
+                    </p>
                   </div>
                 )}
                 {explorerItems.length > 0 && (
@@ -2277,6 +2495,39 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 : <p className="text-sm text-slate-400">No conjunction timeline yet. Load orbital brief to populate event sequence.</p>}
             </div>
 
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm uppercase tracking-widest text-slate-400">Collision-Risk Contract</p>
+                  <button
+                    onClick={() => void runCollisionRiskContract()}
+                    disabled={collisionRiskBusy}
+                    className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {collisionRiskBusy ? "Running..." : "Run /collision-risk"}
+                  </button>
+                </div>
+                <p className="text-sm text-slate-300">{collisionRiskStatus}</p>
+                {collisionRiskResult && (
+                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-200">
+                    <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-slate-400">Closest Distance</p><p className="font-semibold">{Number(collisionRiskResult.closest_approach_km ?? 0).toFixed(3)} km</p></div>
+                    <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-slate-400">Time to Collision</p><p className="font-semibold">{Number(collisionRiskResult.time_to_collision_hours ?? 0).toFixed(3)} h</p></div>
+                    <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-slate-400">Risk Score</p><p className="font-semibold">{Number(collisionRiskResult.risk_score ?? 0).toFixed(2)}%</p></div>
+                    <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3"><p className="text-slate-400">Risk Level</p><p className="font-semibold">{String(collisionRiskResult.risk_level ?? "-")}</p></div>
+                    <div className="rounded-lg bg-slate-800/70 border border-slate-700/50 p-3 col-span-2"><p className="text-slate-400">Fusion Method</p><p className="font-semibold">{String(collisionRiskResult.fusion_method ?? "-")}</p></div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6 space-y-4">
+                <p className="text-sm uppercase tracking-widest text-slate-400">Live Tracking Contract</p>
+                <p className="text-sm text-slate-300">{liveTrackingStatus}</p>
+                {liveTracking.length > 0
+                  ? <Bar data={liveTrackingData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8" } }, y: { ticks: { color: "#94a3b8" } } } }} />
+                  : <p className="text-sm text-slate-400">No live-tracking snapshot available yet. Ensure FastAPI on port 8000 is running.</p>}
+              </div>
+            </div>
+
             <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm uppercase tracking-widest text-slate-400">Reliability Diagram</p>
@@ -2321,7 +2572,39 @@ export function LandingPage({ onNavigate }: LandingPageProps): ReactElement {
                 <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Prediction Uncertainty</p><p className="text-xl font-bold text-yellow-300">{insightResult ? `${(insightUncertainty * 100).toFixed(1)}%` : "Run any inference"}</p></div>
                 <div className="rounded-lg bg-slate-800/80 border border-slate-700/50 p-4"><p className="text-xs text-slate-400">Evidence Intensity</p><p className="text-xl font-bold text-cyan-300">{insightResult ? `${(insightEvidence * 100).toFixed(1)}%` : "Run any inference"}</p></div>
               </div>
+              <div className="mt-4 rounded-lg bg-slate-800/75 border border-slate-700/50 p-4 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-widest text-slate-400 mb-1">Debris Verification</p>
+                <p>Expected from path: <span className="font-semibold text-cyan-300">{expectedPathLabel}</span></p>
+                <p>Predicted label: <span className="font-semibold text-white">{predictedPathLabel}</span></p>
+                <p className={verificationMatch === true ? "text-green-300" : verificationMatch === false ? "text-red-300" : "text-yellow-300"}>
+                  {insightResult?.verification_message ?? "Run selected image from a labeled folder like images/debris or images/non_debris."}
+                </p>
+              </div>
               <p className="text-sm text-slate-300 mt-4">Use the risk surface for immediate threat split, the visual grid for evidence checks, and reliability for confidence calibration review.</p>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">RGB Channel Plot</p>
+                {insightRgb
+                  ? <Line data={rgbHistogramData} options={{ responsive: true, plugins: { legend: { labels: { color: "#cbd5e1" } } }, scales: { x: { ticks: { color: "#94a3b8", maxTicksLimit: 12 } }, y: { ticks: { color: "#94a3b8" } } } }} />
+                  : <p className="text-sm text-slate-400">No RGB profile yet. Run selected image to get channel histogram.</p>}
+              </div>
+              <div className="rounded-xl bg-slate-900/70 border border-slate-700/50 p-6">
+                <p className="text-sm uppercase tracking-widest text-slate-400 mb-3">Evidence Visual Plots</p>
+                {insightResult?.evidence_visuals
+                  ? <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Heatmap</p>
+                      <img src={String(insightResult.evidence_visuals.heatmap_visual ?? "")} alt="Heatmap visual" className="w-full h-40 object-cover rounded border border-slate-700/50" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">BBox Overlay</p>
+                      <img src={String(insightResult.evidence_visuals.bbox_overlay_visual ?? "")} alt="BBox overlay visual" className="w-full h-40 object-cover rounded border border-slate-700/50" />
+                    </div>
+                  </div>
+                  : <p className="text-sm text-slate-400">No evidence visuals yet. Run selected image from your debris folder.</p>}
+              </div>
             </div>
           </div>
         </motion.div>}

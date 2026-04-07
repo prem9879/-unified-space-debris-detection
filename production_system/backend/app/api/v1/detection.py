@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import HTTPException
 
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import require_role
@@ -24,7 +25,10 @@ async def infer_image(
     _: dict = Depends(require_role({"admin", "analyst"})),
 ) -> DetectionResponse:
     raw = await image.read()
-    result = _service.infer(raw, modality=modality)
+    try:
+        result = _service.infer(raw, modality=modality)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid image payload: {exc}") from exc
 
     for det in result.detections:
         x1, y1, x2, y2 = det.bbox_xyxy
@@ -32,6 +36,15 @@ async def infer_image(
         _tracker.update(det.object_id, center)
 
     return result
+
+
+@router.post("/predict", response_model=DetectionResponse)
+async def predict_image(
+    modality: str = Form("optical"),
+    image: UploadFile = File(...),
+    _: dict = Depends(require_role({"admin", "analyst"})),
+) -> DetectionResponse:
+    return await infer_image(modality=modality, image=image, _=_)
 
 
 @router.get("/tracks")
@@ -56,7 +69,10 @@ async def infer_video(
     raw = await image.read()
     series = []
     for _idx in range(max(1, min(frames, 30))):
-        result = _service.infer(raw, modality=modality)
+        try:
+            result = _service.infer(raw, modality=modality)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid image payload: {exc}") from exc
         series.append({
             "frame_id": result.frame_id,
             "detections": len(result.detections),

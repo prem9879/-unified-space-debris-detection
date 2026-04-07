@@ -1,6 +1,10 @@
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 export const LEGACY_API_BASE = import.meta.env.VITE_LEGACY_API_BASE ?? "/legacy-api";
 const LEGACY_API_KEY = import.meta.env.VITE_LEGACY_API_KEY ?? "";
+const API_DEMO_USER = import.meta.env.VITE_API_DEMO_USER ?? "analyst";
+const API_DEMO_PASS = import.meta.env.VITE_API_DEMO_PASS ?? "analyst123";
+
+let cachedApiToken: string | null = null;
 
 function legacyHeaders(apiKey?: string): Record<string, string> {
   const headerKey = apiKey?.trim() || LEGACY_API_KEY;
@@ -64,6 +68,14 @@ export async function login(username: string, password: string): Promise<string>
   if (!res.ok) throw new Error("Login failed");
   const payload = await res.json();
   return payload.access_token;
+}
+
+async function getApiToken(): Promise<string> {
+  if (cachedApiToken) {
+    return cachedApiToken;
+  }
+  cachedApiToken = await login(API_DEMO_USER, API_DEMO_PASS);
+  return cachedApiToken;
 }
 
 export async function legacyPredict(params: {
@@ -262,4 +274,41 @@ export async function legacyMissionStatus(folder?: string, apiKey?: string): Pro
   });
 
   return parseLegacyResponse(res);
+}
+
+export async function fetchCollisionRisk(payload: {
+  object_a: string;
+  object_b: string;
+  position_a_km: number[];
+  velocity_a_km_s: number[];
+  position_b_km: number[];
+  velocity_b_km_s: number[];
+  ai_forecast_horizon_s?: number;
+  ai_risk_weight?: number;
+  history_a?: Array<{ t_s: number; x_km: number; y_km: number; z_km: number }>;
+  history_b?: Array<{ t_s: number; x_km: number; y_km: number; z_km: number }>;
+}): Promise<any> {
+  const token = await getApiToken();
+  const res = await fetch(`${API_BASE}/api/v1/collision/collision-risk`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? body?.error ?? `Collision risk request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchLiveTrackingSnapshot(): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/v1/streams/live-tracking`);
+  if (!res.ok) {
+    throw new Error(`Live tracking request failed: ${res.status}`);
+  }
+  return res.json();
 }

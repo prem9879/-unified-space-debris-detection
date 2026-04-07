@@ -1548,6 +1548,22 @@ def predict_file():
     decision_basis["inference_source"] = result.inference_source
     operational_summary = _build_operational_summary(decision_basis)
 
+    gt_label = _infer_ground_truth_label(image_path)
+    expected_label = "debris" if gt_label == 1 else "non_debris" if gt_label == 0 else "unknown"
+    predicted_label = str(decision_basis.get("predicted_label", "uncertain"))
+    is_path_label_match: bool | None = None
+    if expected_label in {"debris", "non_debris"} and predicted_label in {"debris", "non_debris"}:
+        is_path_label_match = expected_label == predicted_label
+
+    if expected_label == "unknown":
+        verification_message = "Folder label unavailable; verification based on model confidence only."
+    elif is_path_label_match is True:
+        verification_message = f"YES: Path suggests '{expected_label}' and model predicted '{predicted_label}'."
+    elif is_path_label_match is False:
+        verification_message = f"NO: Path suggests '{expected_label}' but model predicted '{predicted_label}'."
+    else:
+        verification_message = f"Path suggests '{expected_label}', model returned uncertain prediction."
+
     return jsonify(
         {
             "requested_model": model_name,
@@ -1567,6 +1583,9 @@ def predict_file():
             "rgb_analysis": rgb_analysis,
             "decision_basis": decision_basis,
             "operational_summary": operational_summary,
+            "expected_label_from_path": expected_label,
+            "is_path_label_match": is_path_label_match,
+            "verification_message": verification_message,
         }
     )
 

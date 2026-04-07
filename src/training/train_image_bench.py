@@ -122,6 +122,7 @@ def train_image_bench(
     epochs: int,
     batch_size: int,
     image_size: int,
+    images_per_class: int = 320,
     split_seed: int = 42,
     dataset_manifest: str | None = None,
 ) -> dict:
@@ -130,7 +131,7 @@ def train_image_bench(
     output_root.mkdir(parents=True, exist_ok=True)
 
     bootstrap = ensure_dataset_bootstrap(
-        data_root, images_per_class=320, image_size=image_size
+        data_root, images_per_class=max(64, int(images_per_class)), image_size=image_size
     )
 
     train_tf = transforms.Compose(
@@ -367,6 +368,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--image_size", type=int, default=224)
+    parser.add_argument("--images_per_class", type=int, default=320)
     parser.add_argument("--split_seed", type=int, default=42)
     parser.add_argument("--dataset_manifest", type=str, default="")
     args = parser.parse_args()
@@ -379,6 +381,7 @@ def main() -> None:
         epochs=args.epochs,
         batch_size=args.batch_size,
         image_size=args.image_size,
+        images_per_class=args.images_per_class,
         split_seed=args.split_seed,
         dataset_manifest=args.dataset_manifest.strip() or None,
     )

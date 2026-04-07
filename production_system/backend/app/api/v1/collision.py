@@ -16,3 +16,11 @@ async def assess_collision(
     _: dict = Depends(require_role({"admin", "analyst"})),
 ) -> CollisionResponse:
     return _service.assess(payload)
+
+
+@router.post("/collision-risk", response_model=CollisionResponse)
+async def collision_risk(
+    payload: CollisionRequest,
+    _: dict = Depends(require_role({"admin", "analyst"})),
+) -> CollisionResponse:
+    return _service.assess(payload)

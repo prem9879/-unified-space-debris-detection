@@ -5,7 +5,6 @@ Shows all running services and their endpoints
 """
 
 import requests
-import json
 from datetime import datetime
 
 def check_endpoint(url: str, timeout: float = 2) -> tuple[bool, str]:
@@ -82,7 +81,7 @@ def main():
         )
         if resp.status_code == 200:
             data = resp.json()
-            print(f"✓ Authentication successful")
+            print("✓ Authentication successful")
             print(f"  - Role: {data.get('role', 'unknown')}")
             print(f"  - Token Type: {data.get('token_type', 'unknown')}")
             
@@ -96,7 +95,7 @@ def main():
                 "Alerts History": "/api/v1/alerts/history",
             }
             
-            print(f"\nProtected Endpoints:")
+            print("\nProtected Endpoints:")
             for name, path in protected_endpoints.items():
                 r = requests.get(f"http://127.0.0.1:8000{path}", headers=headers, timeout=2)
                 icon = "✓" if r.status_code == 200 else "✗"

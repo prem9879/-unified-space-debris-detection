@@ -28,6 +28,8 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
       - name: Run tests
+        env:
+          PYTHONPATH: .
         run: |
           pytest --cov=src --cov-report=xml
       - name: Run UI smoke tests
@@ -38,6 +40,7 @@ jobs:
           PYTHONPATH: .
         run: |
           python scripts/generate_ci_reports.py
+          python scripts/generate_collision_eval_report.py
           python scripts/generate_security_policy.py
           python scripts/generate_slo_report.py
           python scripts/build_hard_negative_index.py --dataset_root data --output artifacts/reports/hard_negative_index.json
@@ -48,6 +51,8 @@ jobs:
           name: calibration-eval-reports
           path: |
             artifacts/reports/*.json
+            artifacts/reports/*.csv
+            artifacts/reports/*.md
       - name: Upload Playwright artifact
         if: always()
         uses: actions/upload-artifact@v4
