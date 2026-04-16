@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up | Unified Space Debris Detection</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <main class="auth-shell">
+    <form method="post" class="auth-card">
+      <h1>Create account</h1>
+      <label>Email</label>
+      <input type="email" name="email" required />
+      <label>Password</label>
+      <input type="password" name="password" minlength="8" required />
+      <label>Confirm password</label>
+      <input type="password" name="confirm_password" minlength="8" required />
+      <button type="submit">Create account</button>
+      <p>Already have an account? <a href="/login">Sign in</a></p>
+    </form>
+  </main>
+</body>
+</html>

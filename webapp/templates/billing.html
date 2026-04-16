@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Billing | Unified Space Debris Detection</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <h1>Billing and Subscription</h1>
+      <p>Signed in as {{ user.email }}</p>
+      <p>Current plan: <strong>{{ user.plan }}</strong></p>
+      <p>Subscription status: <strong>{{ user.subscription_status }}</strong></p>
+
+      <form method="post" action="/billing/checkout">
+        <label>Choose plan</label>
+        <select name="plan">
+          <option value="starter">Starter</option>
+          <option value="pro">Pro</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+        <label>Simulated payment outcome</label>
+        <select name="outcome">
+          <option value="success">Success</option>
+          <option value="failed">Failure</option>
+        </select>
+        <button type="submit">Run checkout simulation</button>
+      </form>
+
+      <form method="post" action="/billing/subscription/upgrade">
+        <button type="submit">Upgrade</button>
+      </form>
+
+      <form method="post" action="/billing/subscription/downgrade">
+        <button type="submit">Downgrade</button>
+      </form>
+
+      <form method="post" action="/logout">
+        <button type="submit" class="secondary-btn">Logout</button>
+      </form>
+      <p><a href="/">Back to dashboard</a></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -103,6 +103,41 @@ Role model:
 - `analyst`: inference and calibration endpoints.
 - `admin`: data-loading administrative endpoints.
 
+### Auth, privacy, billing, and marketing readiness
+
+Added production-readiness pages and flows:
+
+- Legal pages:
+  - `GET /privacy-policy`
+  - `GET /terms-of-service`
+- Cookie consent banner on the dashboard (`Accept` / `Decline` with tracked consent event).
+- Account flows:
+  - `GET|POST /signup`
+  - `GET|POST /login`
+  - `POST /logout`
+  - `GET /verify-email?token=...`
+  - `GET|POST /forgot-password`
+  - `GET|POST /reset-password/<token>`
+- Auth hardening:
+  - Brute-force lockout by IP+email identity (`USDD_LOGIN_LOCK_THRESHOLD`, `USDD_LOGIN_LOCK_SECONDS`).
+- Billing simulation and subscription lifecycle:
+  - `GET /billing`
+  - `POST /billing/checkout` (simulated `success`/`failed`)
+  - `POST /billing/subscription/upgrade`
+  - `POST /billing/subscription/downgrade`
+- Event/page tracking:
+  - Automatic page view tracking to `app_events`
+  - `POST /track_event` for custom product events
+- SEO basics:
+  - `GET /robots.txt`
+  - `GET /sitemap.xml`
+
+Email verification and password reset links are generated and written to `logs/auth_mailbox.log` for local/dev testing.
+
+Google auth endpoint status:
+
+- `GET /auth/google` returns configuration status and next-step guidance if OAuth credentials are not configured.
+
 Open:
 
 ```text

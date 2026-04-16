@@ -33,9 +33,11 @@ from src.data.local_dataset_loader import (  # noqa: E402
 from src.data.nasa_odpo_loader import load_public_nasa_odpo_data  # noqa: E402
 from src.inference.service import PreprocessOptions, UnifiedInferenceService  # noqa: E402
 from src.security.secrets_manager import as_role_map, as_rotation_info, get_api_key_ring  # noqa: E402
+from webapp.auth_and_growth import init_auth_and_growth  # noqa: E402
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+app.config["SECRET_KEY"] = os.getenv("USDD_SECRET_KEY", "change-this-in-production")
 
 CHECKPOINT = ROOT / "artifacts" / "checkpoints" / "unified_latest.pt"
 REPORT = ROOT / "artifacts" / "eval_report.json"
@@ -49,6 +51,8 @@ _RATE_LIMIT_STATE: dict[str, object] = {"window_start": 0.0, "buckets": {}}
 _RATE_LIMIT_LOCK = Lock()
 _ABUSE_STATE: dict[str, object] = {"invalid": {}, "locked_until": {}, "window_start": 0.0, "request_counts": {}}
 _AUDIT_STATE: dict[str, object] = {"last_sig": "", "last_prune_ts": 0.0}
+
+init_auth_and_growth(app, ROOT)
 
 
 class OrbitalObject(TypedDict):
@@ -282,13 +286,34 @@ def enforce_runtime_security_controls():
         "/healthz",
         "/readyz",
         "/options",
+        "/privacy-policy",
+        "/terms-of-service",
+        "/signup",
+        "/login",
+        "/logout",
+        "/forgot-password",
+        "/verify-email",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/track_event",
         "/app",
         "/mission_status",
         "/legacy-api/mission_status",
         "/legacy-api/readyz",
         "/legacy-api/options",
     }
-    if request.path.startswith("/static") or request.path.startswith("/app") or request.path.startswith("/assets") or request.path in open_paths:
+    auth_prefixes = (
+        "/reset-password/",
+        "/billing",
+        "/auth/google",
+    )
+    if (
+        request.path.startswith("/static")
+        or request.path.startswith("/app")
+        or request.path.startswith("/assets")
+        or request.path in open_paths
+        or any(request.path.startswith(prefix) for prefix in auth_prefixes)
+    ):
         return None
 
     if bool(cfg["auth_required"]):

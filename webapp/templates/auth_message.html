@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} | Unified Space Debris Detection</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <h1>{{ title }}</h1>
+      <p>{{ message }}</p>
+      {% if detail %}
+      <p class="auth-detail">{{ detail }}</p>
+      {% endif %}
+      <p><a href="/login">Go to login</a> · <a href="/">Back to dashboard</a></p>
+    </section>
+  </main>
+</body>
+</html>

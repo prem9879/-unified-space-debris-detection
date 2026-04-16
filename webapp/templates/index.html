@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Unified Space Debris Intelligence &amp; Collision Prediction System</title>
+  <meta name="description" content="Unified Space Debris Intelligence and Collision Prediction platform with real-time orbital analytics, secure auth, and explainable risk scoring." />
+  <meta name="robots" content="index,follow" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -673,7 +675,29 @@
         <ul id="datasetSources"></ul>
       </article>
     </section>
+    <footer class="site-footer">
+      <p>Unified Space Debris Detection Platform</p>
+      <nav aria-label="Legal and account links">
+        <a href="/privacy-policy">Privacy Policy</a>
+        <a href="/terms-of-service">Terms of Service</a>
+        <a href="/signup">Sign Up</a>
+        <a href="/login">Login</a>
+        <a href="/billing">Billing</a>
+      </nav>
+    </footer>
   </main>
+
+  <section id="cookieBanner" class="cookie-banner" hidden>
+    <p>
+      We use essential cookies for secure sessions and optional analytics cookies to improve this dashboard.
+      By clicking "Accept", you consent to analytics tracking.
+    </p>
+    <div class="cookie-actions">
+      <button type="button" id="cookieAcceptBtn">Accept</button>
+      <button type="button" id="cookieDeclineBtn" class="secondary-btn">Decline</button>
+      <a href="/privacy-policy">Learn more</a>
+    </div>
+  </section>
   </div>
 
   <script>
@@ -775,6 +799,44 @@
     let activeWorkflowPanel = localStorage.getItem('usdd.workflowTab') || 'ingest';
 
     const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+    const emitEvent = async (event, properties = {}) => {
+      const consent = localStorage.getItem('usdd.cookieConsent');
+      if (consent === 'declined') return;
+      try {
+        await fetch('/track_event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event, properties }),
+        });
+      } catch (_) {
+        // Tracking failure must not impact UX.
+      }
+    };
+
+    const initCookieConsent = () => {
+      const banner = document.getElementById('cookieBanner');
+      const acceptBtn = document.getElementById('cookieAcceptBtn');
+      const declineBtn = document.getElementById('cookieDeclineBtn');
+      if (!banner || !acceptBtn || !declineBtn) return;
+
+      const saved = localStorage.getItem('usdd.cookieConsent');
+      if (!saved) {
+        banner.hidden = false;
+      }
+
+      acceptBtn.addEventListener('click', () => {
+        localStorage.setItem('usdd.cookieConsent', 'accepted');
+        banner.hidden = true;
+        emitEvent('cookie_consent_updated', { consent: 'accepted' });
+      });
+
+      declineBtn.addEventListener('click', () => {
+        localStorage.setItem('usdd.cookieConsent', 'declined');
+        banner.hidden = true;
+        emitEvent('cookie_consent_updated', { consent: 'declined' });
+      });
+    };
 
     const resizeAnalysisCharts = () => {
       requestAnimationFrame(() => {
@@ -1640,9 +1702,12 @@
     appendSources();
     loadBenchmark();
     refreshPlatformStatus();
+    initCookieConsent();
+    emitEvent('page_loaded', { page: '/', workflow: activeWorkflowPanel });
 
     if (heroLoadAllBtn && loadAllBtn) {
       heroLoadAllBtn.addEventListener('click', () => {
+        emitEvent('cta_click', { id: 'heroLoadAllBtn' });
         const nasaCard = loadAllBtn.closest('.card');
         if (nasaCard) {
           nasaCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1653,6 +1718,7 @@
 
     if (heroExplorerBtn && scanDatasetBtn) {
       heroExplorerBtn.addEventListener('click', () => {
+        emitEvent('cta_click', { id: 'heroExplorerBtn' });
         const explorerCard = scanDatasetBtn.closest('.card');
         if (explorerCard) {
           explorerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
